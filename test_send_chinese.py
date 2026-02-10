@@ -14,19 +14,19 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 
 async def main():
     controller = WeChatController()
-    
+
     # 打印当前状态
     status = controller.get_status()
     print(f"Current Status: {status}")
-    
+
     if not status.get('wechat_available'):
         print("WeChat not available!")
         return
 
     # 测试中文发送
-    contact = "10.14"
+    contact = "chatlog session"
     message = "你好，这是一条中文测试消息"
-    
+
     print(f"Sending message to {contact}: {message}")
     result = await controller.send_text_message(contact, message)
     print(f"Result: {result}")

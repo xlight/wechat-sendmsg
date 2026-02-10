@@ -81,45 +81,157 @@ class WeChatController:
             return None
 
     def _find_wechat_window(self) -> Optional[int]:
+        """查找微信主窗口，严格排除悬浮聊天窗口。"""
         import re
 
-        nt_windows = []
-        legacy_windows = []
+        # 首先检查微信进程是否在运行
+        wechat_process_running = False
+        for proc in psutil.process_iter(['name']):
+            name = proc.info.get('name') or ""
+            if 'wechat' in name.lower():
+                wechat_process_running = True
+                self.logger.debug(f"检测到微信进程: {name}")
+                break
+        
+        if not wechat_process_running:
+            self.logger.warning("微信进程未运行")
+            return None
+
+        main_windows = []  # 主窗口（最高优先级）
+        contact_list_windows = []  # 联系人列表窗口（次优先级）
+        chat_windows = []  # 聊天窗口（低优先级，尽量避免）
+        all_wechat_windows = []  # 所有微信窗口（用于调试）
 
         def enum_windows_callback(hwnd, _):
-            if not win32gui.IsWindowVisible(hwnd):
-                return True
             class_name = win32gui.GetClassName(hwnd)
             window_text = win32gui.GetWindowText(hwnd)
+            is_visible = win32gui.IsWindowVisible(hwnd)
 
-            # 优先匹配主窗口类名
+            # 记录所有可能的微信窗口
+            if "WeChat" in class_name or "微信" in window_text or "WeChat" in window_text:
+                all_wechat_windows.append({
+                    'hwnd': hwnd,
+                    'class': class_name,
+                    'text': window_text,
+                    'visible': is_visible,
+                    'iconic': win32gui.IsIconic(hwnd)
+                })
+            
+            if not is_visible:
+                return True
+
+            # 【最高优先级】主窗口类名（微信 NT 框架主窗口）
             if class_name == "WeChatMainWndForPC":
-                nt_windows.insert(0, hwnd) # 插入到最前面
+                self.logger.debug(f"找到主窗口: hwnd={hwnd}, class={class_name}, text={window_text}")
+                main_windows.append(hwnd)
                 return True
             
-            nt_class_patterns = [
-                r"ChatWnd",
-                r"Qt\d+QWindowIcon",
-            ]
-            for pattern in nt_class_patterns:
-                if re.match(pattern, class_name):
-                    # 只有标题包含 WeChat 或 微信 才认为是有效窗口，防止误匹配其他 Qt 应用
-                    if "WeChat" in window_text or "微信" in window_text:
-                        nt_windows.append(hwnd)
-                        return True
+            # 【次优先级】联系人列表窗口（通常标题只有"微信"或"WeChat"）
+            if re.match(r"Qt\d+QWindowIcon", class_name) or re.match(r"Qt\d+QWindowOwnDC", class_name):
+                # 标题只有"微信"或"WeChat"，没有聊天对象名称
+                if window_text in ["微信", "WeChat"]:
+                    self.logger.debug(f"找到联系人列表窗口: hwnd={hwnd}, class={class_name}, text={window_text}")
+                    contact_list_windows.append(hwnd)
+                    return True
+                # 标题包含聊天对象名称，这是聊天窗口
+                elif "微信" in window_text or "WeChat" in window_text:
+                    self.logger.debug(f"找到聊天窗口（跳过）: hwnd={hwnd}, class={class_name}, text={window_text}")
+                    chat_windows.append(hwnd)
+                    return True
 
+            # 【低优先级】ChatWnd 类名（聊天悬浮窗，尽量避免）
+            if class_name == "ChatWnd":
+                self.logger.debug(f"找到聊天悬浮窗（跳过）: hwnd={hwnd}, class={class_name}, text={window_text}")
+                chat_windows.append(hwnd)
+                return True
+
+            # 其他包含"微信"的窗口
             if "微信" in window_text or "WeChat" in window_text:
-                legacy_windows.append(hwnd)
+                self.logger.debug(f"找到其他微信窗口: hwnd={hwnd}, class={class_name}, text={window_text}")
+                chat_windows.append(hwnd)
+            
             return True
 
         win32gui.EnumWindows(enum_windows_callback, None)
-        if nt_windows:
+        
+        self.logger.debug(f"窗口统计 - 主窗口: {len(main_windows)}, 联系人列表: {len(contact_list_windows)}, 聊天窗口: {len(chat_windows)}")
+        
+        # 【优先级 1】返回主窗口
+        if main_windows:
             self._last_window_kind = "nt"
-            return nt_windows[0]
-        if legacy_windows:
-            self._last_window_kind = "legacy"
-            return legacy_windows[0]
+            self.logger.info(f"✅ 找到主窗口: hwnd={main_windows[0]}")
+            return main_windows[0]
+        
+        # 【优先级 2】返回联系人列表窗口
+        if contact_list_windows:
+            self._last_window_kind = "nt"
+            self.logger.info(f"✅ 找到联系人列表窗口: hwnd={contact_list_windows[0]}")
+            return contact_list_windows[0]
+        
+        # 【优先级 3】如果只有聊天窗口，发出警告但仍然返回
+        if chat_windows:
+            self._last_window_kind = "nt"
+            self.logger.warning(f"⚠️  仅找到聊天窗口，建议打开微信主窗口: hwnd={chat_windows[0]}")
+            return chat_windows[0]
+        
+        # 如果没有可见窗口，尝试从所有窗口中恢复主窗口
+        if all_wechat_windows:
+            self.logger.info(f"未找到可见微信窗口，发现 {len(all_wechat_windows)} 个微信窗口（可能在托盘中）")
+            for win_info in all_wechat_windows:
+                self.logger.debug(f"  - hwnd={win_info['hwnd']}, class={win_info['class']}, "
+                                f"text={win_info['text']}, visible={win_info['visible']}, "
+                                f"iconic={win_info['iconic']}")
+                
+                # 优先恢复主窗口
+                if win_info['class'] == "WeChatMainWndForPC":
+                    hwnd = win_info['hwnd']
+                    self.logger.info(f"尝试恢复微信主窗口: hwnd={hwnd}")
+                    try:
+                        # 如果窗口最小化，先恢复
+                        if win_info['iconic']:
+                            win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+                            time.sleep(0.5)
+                        # 如果窗口隐藏，显示它
+                        if not win_info['visible']:
+                            win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
+                            time.sleep(0.5)
+                        # 激活窗口
+                        win32gui.SetForegroundWindow(hwnd)
+                        time.sleep(0.3)
+                        
+                        # 验证窗口现在是否可见
+                        if win32gui.IsWindowVisible(hwnd):
+                            self.logger.info("✅ 成功恢复微信主窗口")
+                            self._last_window_kind = "nt"
+                            return hwnd
+                    except Exception as e:
+                        self.logger.warning(f"恢复主窗口失败: {e}")
+                        continue
+                
+                # 次优先级：恢复联系人列表窗口
+                if win_info['text'] in ["微信", "WeChat"] and "Qt" in win_info['class']:
+                    hwnd = win_info['hwnd']
+                    self.logger.info(f"尝试恢复联系人列表窗口: hwnd={hwnd}")
+                    try:
+                        if win_info['iconic']:
+                            win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+                            time.sleep(0.5)
+                        if not win_info['visible']:
+                            win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
+                            time.sleep(0.5)
+                        win32gui.SetForegroundWindow(hwnd)
+                        time.sleep(0.3)
+                        
+                        if win32gui.IsWindowVisible(hwnd):
+                            self.logger.info("✅ 成功恢复联系人列表窗口")
+                            self._last_window_kind = "nt"
+                            return hwnd
+                    except Exception as e:
+                        self.logger.warning(f"恢复联系人列表窗口失败: {e}")
+                        continue
+        
         self._last_window_kind = None
+        self.logger.warning("微信进程在运行，但无法找到或恢复微信主窗口（请手动打开微信主窗口）")
         return None
 
     def _ensure_modifiers_released(self):
@@ -131,25 +243,41 @@ class WeChatController:
                 ctypes.windll.user32.keybd_event(key, 0, 0x0002, 0) # Key up
 
     def _activate_window(self, hwnd: int) -> bool:
+        """激活微信窗口，支持从最小化/隐藏状态恢复。"""
         try:
             self._ensure_modifiers_released()
             
-            # 1. 强制恢复窗口（解决最小化问题）
-            if win32gui.IsIconic(hwnd):
-                win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+            # 1. 检查窗口是否存在且有效
+            if not win32gui.IsWindow(hwnd):
+                self.logger.error("窗口句柄无效")
+                return False
             
-            # 2. 尝试标准置顶
+            # 2. 如果窗口最小化，先恢复
+            if win32gui.IsIconic(hwnd):
+                self.logger.debug("窗口已最小化，正在恢复...")
+                win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+                time.sleep(0.5)
+            
+            # 3. 如果窗口不可见，显示它
+            if not win32gui.IsWindowVisible(hwnd):
+                self.logger.debug("窗口不可见，正在显示...")
+                win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
+                time.sleep(0.5)
+            
+            # 4. 尝试标准置顶
             try:
                 win32gui.SetForegroundWindow(hwnd)
-            except Exception:
-                pass  # 可能会因为 Windows 限制而失败
+                time.sleep(0.2)
+            except Exception as e:
+                self.logger.debug(f"标准置顶失败: {e}")
 
-            # 3. 检查是否已经置顶
+            # 5. 检查是否已经置顶
             if win32gui.GetForegroundWindow() == hwnd:
+                self.logger.debug("✅ 窗口已成功激活")
                 return True
 
-            # 4. 如果标准置顶失败，使用 AttachThreadInput 大法
-            # 这是官方推荐的绕过 Foreground Lock 的方法，比模拟按键更安全
+            # 6. 如果标准置顶失败，使用 AttachThreadInput 大法
+            # 这是官方推荐的绕过 Foreground Lock 的方法
             try:
                 import win32process
                 import ctypes
@@ -161,10 +289,12 @@ class WeChatController:
                     current_thread_id = windll.kernel32.GetCurrentThreadId()
                     
                     if foreground_thread_id != current_thread_id:
+                        self.logger.debug("使用 AttachThreadInput 方法激活窗口...")
                         # 附加输入上下文
                         windll.user32.AttachThreadInput(current_thread_id, foreground_thread_id, True)
                         # 再次尝试置顶
                         try:
+                            win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
                             win32gui.SetForegroundWindow(hwnd)
                             win32gui.SetFocus(hwnd)
                         except Exception:
@@ -172,11 +302,13 @@ class WeChatController:
                         # 解除附加
                         windll.user32.AttachThreadInput(current_thread_id, foreground_thread_id, False)
             except Exception as e:
-                self.logger.error(f"AttachThreadInput failed: {e}")
+                self.logger.debug(f"AttachThreadInput 失败: {e}")
 
-            # 5. 等待并验证置顶结果
-            for _ in range(10): # 最多等待 1 秒
+            # 7. 等待并验证置顶结果
+            time.sleep(0.3)
+            for _ in range(5):  # 最多重试 5 次
                 if win32gui.GetForegroundWindow() == hwnd:
+                    self.logger.debug("✅ 窗口激活成功")
                     return True
                 time.sleep(0.1)
                 try:
@@ -184,9 +316,9 @@ class WeChatController:
                 except Exception:
                     pass
             
-            # 6. 最终检查：如果没有获得焦点，绝对不要继续
+            # 8. 最终检查
             if win32gui.GetForegroundWindow() != hwnd:
-                self.logger.error("Failed to bring WeChat window to foreground. Operation aborted to prevent mis-clicks.")
+                self.logger.error("❌ 无法将微信窗口置于前台，操作中止（防止误操作其他窗口）")
                 return False
                 
             return True
@@ -430,6 +562,112 @@ class WeChatController:
             self.logger.error(f"Error scheduling message: {e}")
             return False
     
+    def read_chat_messages(self, group_name: str) -> Optional[str]:
+        """通过 GUI 自动化读取指定群聊的可见消息文本。
+
+        流程：搜索并切换到目标群聊 → 选中聊天区域 → 复制到剪贴板 → 返回文本。
+
+        Args:
+            group_name: 目标群聊名称
+
+        Returns:
+            聊天记录文本，失败时返回 None
+        """
+        try:
+            hwnd = self._find_wechat_window()
+            if not hwnd:
+                self.logger.error("微信窗口未找到，无法读取消息（检查微信是否在运行且未最小化）")
+                return None
+
+            # 检查窗口是否可见
+            if not win32gui.IsWindowVisible(hwnd):
+                self.logger.error("微信窗口不可见，无法读取消息")
+                return None
+
+            if not self._activate_window(hwnd):
+                self.logger.error("无法激活微信窗口（可能被其他窗口覆盖）")
+                return None
+
+            # 等待窗口激活稳定
+            time.sleep(0.5)
+
+            # 再次验证窗口句柄
+            hwnd_check = self._find_wechat_window()
+            if not hwnd_check or hwnd_check != hwnd:
+                self.logger.error("微信窗口句柄在激活后发生变化")
+                return None
+
+            # 搜索并切换到目标群聊
+            if not self._search_contact_nt(group_name):
+                self.logger.error(f"无法切换到群聊: {group_name}（检查群聊名称是否精确匹配）")
+                return None
+
+            time.sleep(0.8)
+
+            # 二次确认焦点
+            if win32gui.GetForegroundWindow() != hwnd:
+                self.logger.error("微信未获得焦点，中止消息读取")
+                return None
+
+            # 定位聊天记录区域并选中内容
+            rect = win32gui.GetWindowRect(hwnd)
+            window_left, window_top, window_right, window_bottom = rect
+            window_width = window_right - window_left
+            window_height = window_bottom - window_top
+
+            # 点击聊天记录区域中央（输入框上方）
+            chat_center_x = window_left + window_width // 2
+            chat_center_y = window_top + int(window_height * 0.45)
+            pyautogui.click(int(chat_center_x), int(chat_center_y))
+            time.sleep(0.4)
+
+            # 备份剪贴板
+            original_data: Optional[str] = None
+            win32clipboard.OpenClipboard()
+            try:
+                try:
+                    data = win32clipboard.GetClipboardData(win32clipboard.CF_UNICODETEXT)
+                    if isinstance(data, str):
+                        original_data = data
+                except Exception:
+                    original_data = None
+            finally:
+                win32clipboard.CloseClipboard()
+
+            # 全选聊天记录并复制
+            pyautogui.hotkey('ctrl', 'a')
+            time.sleep(0.3)
+            pyautogui.hotkey('ctrl', 'c')
+            time.sleep(0.4)
+
+            # 从剪贴板读取内容
+            chat_text: Optional[str] = None
+            win32clipboard.OpenClipboard()
+            try:
+                try:
+                    chat_text = win32clipboard.GetClipboardData(win32clipboard.CF_UNICODETEXT)
+                except Exception:
+                    chat_text = None
+            finally:
+                win32clipboard.CloseClipboard()
+
+            # 恢复剪贴板
+            self._restore_clipboard(original_data)
+
+            # 取消选中
+            pyautogui.press('escape')
+            time.sleep(0.2)
+
+            if not chat_text:
+                self.logger.warning(f"未能从群聊 {group_name} 读取到消息")
+                return None
+
+            return chat_text
+
+        except Exception as e:
+            self.logger.error(f"读取群聊消息时出错: {e}")
+            return None
+
     def get_status(self) -> Dict[str, Any]:
         """获取微信控制器的当前状态。"""
         try:
