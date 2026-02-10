@@ -416,6 +416,7 @@ class WeChatController:
             return False
 
     def _search_contact_nt(self, contact_name: str) -> bool:
+        """搜索联系人/群聊并打开聊天窗口（NT 框架）。"""
         # Double check focus before typing
         hwnd = self._find_wechat_window()
         if not hwnd or win32gui.GetForegroundWindow() != hwnd:
@@ -424,18 +425,28 @@ class WeChatController:
 
         original_data: Optional[str] = None
         try:
+            # 打开搜索框
             pyautogui.hotkey('ctrl', 'f')
             time.sleep(1.0)
+            
+            # 清空搜索框
             pyautogui.hotkey('ctrl', 'a')
             time.sleep(0.2)
             pyautogui.press('delete')
             time.sleep(0.2)
 
+            # 输入联系人名称
             original_data = self._paste_text_via_clipboard(contact_name)
 
+            # 回车打开聊天
             pyautogui.press('enter')
             time.sleep(1.0)
+            
+            # 关闭搜索框（按 Escape 关闭搜索框，不会关闭聊天窗口）
+            pyautogui.press('escape')
+            time.sleep(0.3)
 
+            self.logger.debug(f"成功搜索并打开: {contact_name}")
             return True
         except Exception as e:
             self.logger.error(f"Failed to search contact in NT: {e}")
@@ -584,20 +595,22 @@ class WeChatController:
                 self.logger.error("微信窗口不可见，无法读取消息")
                 return None
 
-            if not self._activate_window(hwnd):
-                self.logger.error("无法激活微信窗口（可能被其他窗口覆盖）")
-                return None
+            # 暂时注释掉窗口激活（避免后台窗口问题）
+            # if not self._activate_window(hwnd):
+            #     self.logger.error("无法激活微信窗口（可能被其他窗口覆盖）")
+            #     return None
 
-            # 等待窗口激活稳定
-            time.sleep(0.5)
+            # # 等待窗口激活稳定
+            # time.sleep(0.5)
 
-            # 再次验证窗口句柄
-            hwnd_check = self._find_wechat_window()
-            if not hwnd_check or hwnd_check != hwnd:
-                self.logger.error("微信窗口句柄在激活后发生变化")
-                return None
+            # # 再次验证窗口句柄
+            # hwnd_check = self._find_wechat_window()
+            # if not hwnd_check or hwnd_check != hwnd:
+            #     self.logger.error("微信窗口句柄在激活后发生变化")
+            #     return None
 
             # 搜索并切换到目标群聊
+            self.logger.debug(f"开始搜索群聊: {group_name}")
             if not self._search_contact_nt(group_name):
                 self.logger.error(f"无法切换到群聊: {group_name}（检查群聊名称是否精确匹配）")
                 return None
@@ -606,8 +619,8 @@ class WeChatController:
 
             # 二次确认焦点
             if win32gui.GetForegroundWindow() != hwnd:
-                self.logger.error("微信未获得焦点，中止消息读取")
-                return None
+                self.logger.warning("微信未获得焦点，但继续尝试读取消息")
+                # return None  # 不直接返回，尝试继续
 
             # 定位聊天记录区域并选中内容
             rect = win32gui.GetWindowRect(hwnd)
@@ -654,14 +667,17 @@ class WeChatController:
             # 恢复剪贴板
             self._restore_clipboard(original_data)
 
-            # 取消选中
-            pyautogui.press('escape')
+            # 取消选中 - 点击输入框而不是按 Escape（避免关闭窗口）
+            input_box_x = window_left + window_width // 2
+            input_box_y = window_bottom - 80
+            pyautogui.click(int(input_box_x), int(input_box_y))
             time.sleep(0.2)
 
             if not chat_text:
                 self.logger.warning(f"未能从群聊 {group_name} 读取到消息")
                 return None
 
+            self.logger.debug(f"成功读取群聊消息，共 {len(chat_text)} 字符")
             return chat_text
 
         except Exception as e:

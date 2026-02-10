@@ -117,12 +117,26 @@ class MessageListener:
             logger.debug(f"群聊 {group_name} 未读取到消息")
             return
 
-        logger.debug(f"成功从群聊 {group_name} 读取到 {len(chat_text)} 字符")
+        logger.info(f"成功从群聊 {group_name} 读取到 {len(chat_text)} 字符")
+        
+        # 输出最近几条消息预览
+        lines = chat_text.strip().split('\n')
+        logger.info(f"群聊消息总行数: {len(lines)}")
+        
+        # 显示最后 10 条消息（或全部消息如果少于 10 条）
+        preview_count = min(10, len(lines))
+        logger.info(f"最近 {preview_count} 行消息预览:")
+        logger.info("-" * 60)
+        for line in lines[-preview_count:]:
+            logger.info(f"  {line}")
+        logger.info("-" * 60)
 
         # 解析消息并检测 @ 提及
         mentions = self._detect_mentions(chat_text, group_name)
         if mentions:
-            logger.debug(f"在群聊 {group_name} 中检测到 {len(mentions)} 条 @ 提及")
+            logger.info(f"在群聊 {group_name} 中检测到 {len(mentions)} 条 @ 提及")
+        else:
+            logger.debug(f"群聊 {group_name} 中未检测到 @ 提及")
         
         for mention in mentions:
             msg_hash = self._compute_hash(mention)
@@ -131,7 +145,7 @@ class MessageListener:
                 continue
             # 标记为已处理
             self._seen_hashes[msg_hash] = time.time()
-            logger.info(f"检测到 @ 提及 - 群: {group_name}, 发送者: {mention.sender}, 内容: {mention.content}")
+            logger.info(f"✅ 检测到新的 @ 提及 - 群: {group_name}, 发送者: {mention.sender}, 内容: {mention.content}")
             # 回调
             if self._on_mention:
                 try:
