@@ -19,7 +19,10 @@ import win32con
 import win32gui
 import win32clipboard
 
-from anti_ban import NaturalGUIOperations
+try:
+    from .anti_ban import NaturalGUIOperations
+except ImportError:
+    from anti_ban import NaturalGUIOperations
 
 class WeChatController:
     """微信自动化操作控制器（仅 NT 版本）。"""
@@ -196,14 +199,14 @@ class WeChatController:
                         # 如果窗口最小化，先恢复
                         if win_info['iconic']:
                             win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
-                            time.sleep(0.5)
+                            time.sleep(10.5)
                         # 如果窗口隐藏，显示它
                         if not win_info['visible']:
                             win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
-                            time.sleep(0.5)
+                            time.sleep(10.5)
                         # 激活窗口
                         win32gui.SetForegroundWindow(hwnd)
-                        time.sleep(0.3)
+                        time.sleep(10.3)
 
                         # 验证窗口现在是否可见
                         if win32gui.IsWindowVisible(hwnd):
@@ -335,6 +338,7 @@ class WeChatController:
     def _find_and_click_input_box(self) -> bool:
         try:
             hwnd = self._find_wechat_window()
+            self.logger.error(f"寻找输入框，当前微信窗口句柄: {hwnd}")
             if not hwnd:
                 self.logger.error("WeChat window not found")
                 return False
@@ -355,11 +359,14 @@ class WeChatController:
                 try:
                     # 使用自然点击代替直接点击
                     self._natural_gui.natural_click(int(click_x), int(click_y))
-                    time.sleep(0.4)
+                    self.logger.error(f"尝试点击输入框位置: ({click_x}, {click_y})")
+                    time.sleep(5.4)
                     pyautogui.typewrite('a')
-                    time.sleep(0.1)
+                    self.logger.error("输入测试字符 'a' 来验证输入框是否激活")
+                    time.sleep(5.1)
                     pyautogui.press('backspace')
-                    time.sleep(0.1)
+                    self.logger.error("删除测试字符 'a'")
+                    time.sleep(5.1)
                     return True
                 except Exception:
                     continue
@@ -370,7 +377,18 @@ class WeChatController:
             self.logger.error(f"Failed to locate input box: {e}")
             return False
 
-    def _paste_text_via_clipboard(self, text: str) -> Optional[str]:
+    def _set_clipboard_and_paste(self, text: str) -> Optional[str]:
+        """备份剪贴板，设置新内容并粘贴到当前焦点位置。
+
+        注意：此方法不会清空输入框，调用方需要在调用前自行清空。
+
+        Args:
+            text: 要粘贴的文本内容
+
+        Returns:
+            原剪贴板内容（用于后续恢复），失败返回 None
+        """
+        # 备份原剪贴板内容
         original_data: Optional[str] = None
         win32clipboard.OpenClipboard()
         try:
@@ -383,12 +401,7 @@ class WeChatController:
         finally:
             win32clipboard.CloseClipboard()
 
-        # 使用自然 GUI 操作（随机停顿）
-        pyautogui.hotkey('ctrl', 'a')
-        self._natural_gui._random_pause()  # 添加随机停顿
-        pyautogui.press('delete')
-        self._natural_gui._random_pause(0.15, 0.35)  # 添加随机停顿
-
+        # 设置新的剪贴板内容
         win32clipboard.OpenClipboard()
         try:
             win32clipboard.EmptyClipboard()
@@ -396,16 +409,32 @@ class WeChatController:
         finally:
             win32clipboard.CloseClipboard()
 
-        self._natural_gui._random_pause(0.15, 0.35)  # 添加随机停顿
+        # 验证剪贴板内容是否设置成功
+        time.sleep(0.1)
+        win32clipboard.OpenClipboard()
+        try:
+            verify = win32clipboard.GetClipboardData(win32clipboard.CF_UNICODETEXT)
+            if verify != text:
+                self.logger.error(f"剪贴板验证失败！期望: {text[:20]}, 实际: {verify[:20] if verify else 'None'}")
+            else:
+                self.logger.debug(f"剪贴板设置成功: {text[:20]}...")
+        finally:
+            win32clipboard.CloseClipboard()
 
-        # 使用 natural_gui 的安全粘贴快捷键随机选择
-        import random
-        if random.random() < 0.5:
-            pyautogui.hotkey('ctrl', 'v')
-        else:
-            pyautogui.hotkey('shift', 'insert')
+        # 等待剪贴板稳定
+        time.sleep(0.2)
 
-        self._natural_gui._random_pause(0.4, 0.8)  # 添加随机停顿
+        # 执行粘贴操作 - 使用更可靠的方式
+        self.logger.debug("执行粘贴操作 (Ctrl+V)...")
+        pyautogui.keyDown('ctrl')
+        time.sleep(0.05)
+        pyautogui.press('v')
+        time.sleep(0.05)
+        pyautogui.keyUp('ctrl')
+
+        # 等待粘贴完成
+        time.sleep(0.5)
+        self.logger.debug("粘贴操作完成")
         return original_data
 
     def _restore_clipboard(self, original_data: Optional[str]) -> None:
@@ -422,8 +451,28 @@ class WeChatController:
             return
 
     def _input_text_via_clipboard(self, text: str) -> bool:
+        """清空当前输入框并通过剪贴板输入文本。
+
+        此方法会：
+        1. 全选并删除当前内容
+        2. 通过剪贴板粘贴新文本
+        3. 恢复原剪贴板内容
+
+        Args:
+            text: 要输入的文本
+
+        Returns:
+            成功返回 True，失败返回 False
+        """
         try:
-            original_data = self._paste_text_via_clipboard(text)
+            # 清空当前输入框
+            pyautogui.hotkey('ctrl', 'a')
+            self._natural_gui._random_pause()
+            pyautogui.press('delete')
+            self._natural_gui._random_pause(0.15, 0.35)
+
+            # 粘贴文本
+            original_data = self._set_clipboard_and_paste(text)
             self._restore_clipboard(original_data)
             return True
         except Exception as e:
@@ -442,24 +491,29 @@ class WeChatController:
         try:
             # 打开搜索框
             pyautogui.hotkey('ctrl', 'f')
-            time.sleep(1.0)
+            self.logger.error("打开搜索框 (Ctrl+F)")
+            time.sleep(3.0)
 
             # 清空搜索框
             pyautogui.hotkey('ctrl', 'a')
-            time.sleep(0.2)
+            self.logger.error("全选搜索框内容 (Ctrl+A)")
+            time.sleep(2.2)
             pyautogui.press('delete')
-            time.sleep(0.2)
+            self.logger.error("清空搜索框内容 (Delete)")
+            time.sleep(2.2)
 
-            # 输入联系人名称
-            original_data = self._paste_text_via_clipboard(contact_name)
+            # 输入联系人名称（粘贴）
+            original_data = self._set_clipboard_and_paste(contact_name)
+            self.logger.error(f"输入联系人名称: {contact_name}")
+            time.sleep(5.2)
 
             # 回车打开聊天
             pyautogui.press('enter')
-            time.sleep(1.0)
+            time.sleep(5.0)
 
-            # 关闭搜索框（按 Escape 关闭搜索框，不会关闭聊天窗口）
-            pyautogui.press('escape')
-            time.sleep(0.3)
+            # 关闭聊天窗口
+            # pyautogui.press('escape')
+            # time.sleep(5.3)
 
             self.logger.debug(f"成功搜索并打开: {contact_name}")
             return True
@@ -470,28 +524,44 @@ class WeChatController:
             self._restore_clipboard(original_data)
 
     def _send_text_nt(self, message: str) -> bool:
+        self.logger.debug(f"准备发送消息: {message[:20]}...")
         try:
             if not self._find_and_click_input_box():
+                self.logger.error("输入框未找到，无法发送消息")
                 # 尝试再次寻找
-                time.sleep(0.5)
+                time.sleep(5.5)
                 if not self._find_and_click_input_box():
+                    self.logger.error("再次尝试寻找输入框失败，发送消息中止")
                     return False
+            self.logger.debug("输入框已点击，准备输入消息...")
+            time.sleep(5.5)  # 等待输入框稳定
 
-            original_data = self._paste_text_via_clipboard(message)
+            # 清空输入框（以防有残留内容）
+            pyautogui.hotkey('ctrl', 'a')
+            time.sleep(0.3)
+            pyautogui.press('delete')
+            time.sleep(0.3)
 
+            # 粘贴消息内容
+            original_data = self._set_clipboard_and_paste(message)
+            self.logger.debug("文本输入完成，准备发送...")
+            time.sleep(5.5)  # 等待输入稳定
             try:
                 pyautogui.press('enter')
-                time.sleep(0.6)
+                self.logger.debug("按下 Enter 键发送消息")
+                time.sleep(5.6)
                 # 尝试恢复剪贴板，但失败不影响发送结果
                 try:
                     self._restore_clipboard(original_data)
+                    self.logger.debug("剪贴板已恢复")
                 except Exception:
                     pass
                 return True
             except Exception:
                 try:
                     pyautogui.hotkey('ctrl', 'enter')
-                    time.sleep(0.6)
+                    self.logger.debug("按下 Ctrl+Enter 键发送消息")
+                    time.sleep(5.6)
                     # 尝试恢复剪贴板，但失败不影响发送结果
                     try:
                         self._restore_clipboard(original_data)
@@ -501,7 +571,8 @@ class WeChatController:
                 except Exception:
                     try:
                         pyautogui.hotkey('alt', 's')
-                        time.sleep(0.6)
+                        self.logger.debug("按下 Alt+S 键发送消息")
+                        time.sleep(10.6)
                         # 尝试恢复剪贴板，但失败不影响发送结果
                         try:
                             self._restore_clipboard(original_data)
@@ -549,7 +620,7 @@ class WeChatController:
                 result["stage"] = "search_contact"
                 result["reason"] = "search_failed"
                 return result
-
+            self.logger.debug("联系人已打开，准备发送消息...")
             if self._send_text_nt(message):
                 result["ok"] = True
                 result["stage"] = "send_text"
