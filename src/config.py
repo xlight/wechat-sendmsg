@@ -14,16 +14,30 @@ logger = logging.getLogger(__name__)
 # 默认配置值
 DEFAULTS: Dict[str, Any] = {
     "http_port": 8080,
-    "poll_interval": 5,
-    "monitored_groups": [],
-    "bot_name": "",
-    "ai_base_url": "",
-    "ai_api_key": "",
-    "ai_model": "gpt-3.5-turbo",
-    "system_prompt": "",
-    "max_reply_chars": 1000,
-    "ai_timeout": 30,
+    # 防封号配置 - 速率限制
     "rate_limit_per_minute": 10,
+    "rate_limit_per_hour": 20,
+    "rate_limit_per_day": 100,
+    # 防封号配置 - 人类行为模拟
+    "min_think_time": 3.0,
+    "max_think_time": 15.0,
+    "min_random_delay": 1.0,
+    "max_random_delay": 3.0,
+    # 防封号配置 - 工作时间控制
+    "work_hours_start": 9,
+    "work_hours_end": 22,
+    "work_days": [0, 1, 2, 3, 4],  # 周一到周五
+    "max_daily_runtime_hours": 8.0,
+    # 防封号配置 - 内容多样化
+    "prefix_probability": 0.1,
+    "suffix_probability": 0.05,
+    "random_skip_probability": 0.2,
+    # 防封号配置 - GUI 操作
+    "gui_offset_range": 3,
+    "gui_move_duration_min": 0.1,
+    "gui_move_duration_max": 0.3,
+    "gui_pause_min": 0.05,
+    "gui_pause_max": 0.15,
 }
 
 # 配置文件默认路径（项目根目录下）
@@ -46,58 +60,88 @@ class Config:
         return int(self._data.get("http_port", DEFAULTS["http_port"]))
 
     @property
-    def poll_interval(self) -> int:
-        return int(self._data.get("poll_interval", DEFAULTS["poll_interval"]))
-
-    @property
-    def monitored_groups(self) -> List[str]:
-        return list(self._data.get("monitored_groups", DEFAULTS["monitored_groups"]))
-
-    @property
-    def bot_name(self) -> str:
-        return str(self._data.get("bot_name", DEFAULTS["bot_name"]))
-
-    @property
-    def ai_base_url(self) -> str:
-        return str(self._data.get("ai_base_url", DEFAULTS["ai_base_url"]))
-
-    @property
-    def ai_api_key(self) -> str:
-        return str(self._data.get("ai_api_key", DEFAULTS["ai_api_key"]))
-
-    @property
-    def ai_model(self) -> str:
-        return str(self._data.get("ai_model", DEFAULTS["ai_model"]))
-
-    @property
-    def system_prompt(self) -> str:
-        return str(self._data.get("system_prompt", DEFAULTS["system_prompt"]))
-
-    @property
-    def max_reply_chars(self) -> int:
-        return int(self._data.get("max_reply_chars", DEFAULTS["max_reply_chars"]))
-
-    @property
-    def ai_timeout(self) -> int:
-        return int(self._data.get("ai_timeout", DEFAULTS["ai_timeout"]))
-
-    @property
     def rate_limit_per_minute(self) -> int:
         return int(self._data.get("rate_limit_per_minute", DEFAULTS["rate_limit_per_minute"]))
+
+    @property
+    def rate_limit_per_hour(self) -> int:
+        return int(self._data.get("rate_limit_per_hour", DEFAULTS["rate_limit_per_hour"]))
+
+    @property
+    def rate_limit_per_day(self) -> int:
+        return int(self._data.get("rate_limit_per_day", DEFAULTS["rate_limit_per_day"]))
+
+    @property
+    def min_think_time(self) -> float:
+        return float(self._data.get("min_think_time", DEFAULTS["min_think_time"]))
+
+    @property
+    def max_think_time(self) -> float:
+        return float(self._data.get("max_think_time", DEFAULTS["max_think_time"]))
+
+    @property
+    def min_random_delay(self) -> float:
+        return float(self._data.get("min_random_delay", DEFAULTS["min_random_delay"]))
+
+    @property
+    def max_random_delay(self) -> float:
+        return float(self._data.get("max_random_delay", DEFAULTS["max_random_delay"]))
+
+    @property
+    def work_hours_start(self) -> int:
+        return int(self._data.get("work_hours_start", DEFAULTS["work_hours_start"]))
+
+    @property
+    def work_hours_end(self) -> int:
+        return int(self._data.get("work_hours_end", DEFAULTS["work_hours_end"]))
+
+    @property
+    def work_days(self) -> List[int]:
+        return list(self._data.get("work_days", DEFAULTS["work_days"]))
+
+    @property
+    def max_daily_runtime_hours(self) -> float:
+        return float(self._data.get("max_daily_runtime_hours", DEFAULTS["max_daily_runtime_hours"]))
+
+    @property
+    def prefix_probability(self) -> float:
+        return float(self._data.get("prefix_probability", DEFAULTS["prefix_probability"]))
+
+    @property
+    def suffix_probability(self) -> float:
+        return float(self._data.get("suffix_probability", DEFAULTS["suffix_probability"]))
+
+    @property
+    def random_skip_probability(self) -> float:
+        return float(self._data.get("random_skip_probability", DEFAULTS["random_skip_probability"]))
+
+    @property
+    def gui_offset_range(self) -> int:
+        return int(self._data.get("gui_offset_range", DEFAULTS["gui_offset_range"]))
+
+    @property
+    def gui_move_duration_min(self) -> float:
+        return float(self._data.get("gui_move_duration_min", DEFAULTS["gui_move_duration_min"]))
+
+    @property
+    def gui_move_duration_max(self) -> float:
+        return float(self._data.get("gui_move_duration_max", DEFAULTS["gui_move_duration_max"]))
+
+    @property
+    def gui_pause_min(self) -> float:
+        return float(self._data.get("gui_pause_min", DEFAULTS["gui_pause_min"]))
+
+    @property
+    def gui_pause_max(self) -> float:
+        return float(self._data.get("gui_pause_max", DEFAULTS["gui_pause_max"]))
+
 
     # ------------------------------------------------------------------
     # 序列化 / 反序列化
     # ------------------------------------------------------------------
     def to_dict(self, mask_secrets: bool = False) -> Dict[str, Any]:
-        """返回配置字典。mask_secrets=True 时对 api_key 脱敏。"""
-        data = dict(self._data)
-        if mask_secrets and data.get("ai_api_key"):
-            key = data["ai_api_key"]
-            if len(key) > 8:
-                data["ai_api_key"] = f"{key[:3]}****{key[-4:]}"
-            else:
-                data["ai_api_key"] = "****"
-        return data
+        """返回配置字典。"""
+        return dict(self._data)
 
     def update(self, patch: Dict[str, Any]) -> None:
         """运行时更新配置（不写入文件）。"""

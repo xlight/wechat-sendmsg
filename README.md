@@ -7,7 +7,7 @@
 ![GitHub license](https://img.shields.io/github/license/1052666/WeChat-MCP-Server)
 ![Python version](https://img.shields.io/badge/python-3.8%2B-blue)
 
-**一个符合 Model Context Protocol (MCP) 标准的微信消息发送服务器，专为AI助手设计**
+**一个HTTP API驱动的微信消息发送工具，支持MCP协议集成，专为AI助手和自动化任务设计**
 
 [快速开始](#-安装和配置) • [功能特点](#-功能特点) • [使用方法](#-使用方法) • [API文档](#️-可用工具) • [贡献指南](#-贡献)
 
@@ -23,7 +23,7 @@
 - [安装和配置](#-安装和配置)
 - [可用工具](#️-可用工具)
 - [使用方法](#-使用方法)
-- [自动回复功能](#-自动回复功能)
+- [HTTP API](#-http-api)
 - [自动化任务与消息报备](#-自动化任务与消息报备)
 - [MCP协议实现](#-mcp协议实现)
 - [技术架构](#️-技术架构)
@@ -50,22 +50,34 @@
 
 ## ✨ 功能特点
 
-- ✅ **MCP标准兼容** - 完全符合 MCP 标准规范
-- ✅ **JSON-RPC 2.0** - 基于标准的 JSON-RPC 2.0 协议
-- ✅ **微信消息发送** - 支持发送微信文本消息
-- ✅ **定时发送** - 支持定时发送消息功能
+- ✅ **MCP标准兼容** - 完全符合 MCP 标准规范，可与 Claude、ChatGPT 等 AI 助手集成
+- ✅ **HTTP API** - 提供 RESTful API 接口，支持消息发送和状态查询
+- ✅ **JSON-RPC 2.0** - MCP 服务器基于标准的 JSON-RPC 2.0 协议
+- ✅ **微信消息发送** - 支持发送文本和文件消息到微信联系人或群聊
+- ✅ **定时发送** - 支持延迟发送消息功能
 - ✅ **全面版本支持** - 完全支持微信4.0以上的NT框架版本和传统微信版本
 - ✅ **智能版本检测** - 自动检测微信版本并适配相应的操作方式
-- ✅ **智能输入框定位** - 自适应不同窗口大小和布局的输入框位置
 - ✅ **剪贴板输入技术** - 使用剪贴板输入，完全避免输入法状态影响
 - ✅ **多种发送方式** - 支持Enter、Ctrl+Enter、Alt+S等多种发送快捷键
-- ✅ **异步处理** - 异步处理，不阻塞AI助手
+- ✅ **异步处理** - 异步处理，不阻塞 AI 助手或调用方
 - ✅ **完整日志** - 完整的错误处理和日志记录
-- ✅ **部分文本支持** - 目前支持发送英文、数字、表情符号等，暂不支持中文消息发送（可能导致乱码）
-- ✅ **群聊自动回复** - 监听群聊 @提及，通过 AI 自动生成并发送回复
-- ✅ **HTTP API** - 提供 RESTful API，支持消息发送、状态查询和配置管理
-- ✅ **AI 集成** - 对接 OpenAI 兼容 API，支持自定义模型和系统提示词
-- ✅ **速率限制** - 基于滑动窗口的 AI 调用频率限制，防止滥用
+- ✅ **防封号保护系统** - 多层防护机制降低账号封禁风险
+  - 增强版速率限制（分钟/小时/天三级限制）
+  - 人类行为模拟（随机思考时间、打字速度）
+  - 工作时间控制（仅在指定时段和日期运行）
+  - 内容多样化（智能添加前缀/后缀、随机跳过）
+  - 自然 GUI 操作（随机鼠标偏移、缓慢移动）
+
+## 🔴 不再包含的功能
+
+**v2.0.0 起，以下功能已移除：**
+- ❌ 群聊消息监听和自动回复
+- ❌ AI 服务集成（OpenAI 兼容 API）
+- ❌ 配置管理 API 端点
+
+**原因：** 这些功能依赖于不可靠的消息读取机制（需要使用 `Ctrl+A` 选择文本，但在微信中不生效），且增加了项目复杂度。
+
+**替代方案：** 如需监听微信消息，建议使用专用的微信消息监听服务（如 [chatlog](https://github.com/LC044/WeChatMsg)），然后通过本项目的 HTTP API 发送回复消息。
 
 ## 📁 项目结构
 
@@ -76,21 +88,25 @@ WeChat-MCP-Server/
 │   ├── 📄 mcp_server.py             # MCP服务器主要实现
 │   ├── 📄 wechat_controller.py      # 微信自动化控制器
 │   ├── 📄 config.py                 # 配置管理模块
-│   ├── 📄 ai_integration.py         # AI 服务对接（OpenAI 兼容 API）
-│   ├── 📄 message_listener.py       # 群聊消息监听器
 │   ├── 📄 http_server.py            # HTTP API 服务器
-│   └── 📄 auto_reply.py             # 自动回复编排器 & 启动入口
+│   └── 📂 anti_ban/                 # 防封号保护系统
+│       ├── 📄 __init__.py           # 防封号包初始化
+│       ├── 📄 enhanced_rate_limiter.py    # 增强版速率限制器
+│       ├── 📄 human_behavior.py     # 人类行为模拟器
+│       ├── 📄 work_time_controller.py     # 工作时间控制器
+│       ├── 📄 content_diversifier.py      # 内容多样化器
+│       └── 📄 natural_gui.py        # 自然 GUI 操作
 ├── 📂 examples/
 │   └── 📄 mcp_client_example.py     # 客户端使用示例
 ├── 📂 docs/
-│   └── 📄 QUICK_START.md            # 快速开始指南
+│   ├── 📄 QUICK_START.md            # 快速开始指南
+│   └── 📄 AVOID_BAN.md              # 防封号指南
 ├── 📂 支持我们/
 │   ├── 🖼️ 1.jpg                     # 支付宝收款码
 │   └── 🖼️ 2.jpg                     # 微信赞赏码
-├── 📄 config.json                   # 自动回复配置文件
+├── 📄 config.json                   # 配置文件（运行时自动生成）
 ├── 📄 mcp_config.json               # MCP配置文件
 ├── 📄 requirements.txt              # 依赖包列表
-├── 📄 test_auto_reply.py            # 自动回复单元测试
 ├── 📄 LICENSE                       # 许可证文件
 └── 📄 README.md                     # 项目说明文档
 ```
@@ -202,59 +218,43 @@ pip install -r requirements.txt
 
 运行示例客户端进行测试：
 
-## 🔄 自动回复功能
-
-### 功能概述
-
-自动回复功能可以监听指定微信群聊中的 `@bot_name` 提及消息，将消息发送给 AI（OpenAI 兼容 API）分析，然后自动将 AI 回复发送到群聊中。同时提供 HTTP API 用于外部集成。
-
-### 启动方式
-
 ```bash
-python src/auto_reply.py
+cd examples
+python mcp_client_example.py
 ```
 
-启动后将同时运行：
-- 群聊消息监听器（按 `poll_interval` 间隔轮询）
-- HTTP API 服务器（默认监听 `0.0.0.0:8080`）
+## 📡 HTTP API
 
-使用 `Ctrl+C` 优雅停止服务。
+### 启动 HTTP 服务器
 
-### 配置指南
+```bash
+python src/http_server.py
+```
 
-编辑项目根目录的 `config.json`（首次运行时会自动创建模板）：
+服务器将在 `http://0.0.0.0:8080` 启动（端口可在 `config.json` 中配置）。
+
+### 配置文件
+
+首次运行时会在项目根目录自动创建 `config.json` 模板文件。主要配置项：
 
 ```json
 {
   "http_port": 8080,
-  "poll_interval": 5,
-  "monitored_groups": ["群聊名称1", "群聊名称2"],
-  "bot_name": "你的微信昵称",
-  "ai_base_url": "https://api.openai.com",
-  "ai_api_key": "sk-...",
-  "ai_model": "gpt-3.5-turbo",
-  "system_prompt": "你是一个有用的助手。",
-  "max_reply_chars": 1000,
-  "ai_timeout": 30,
-  "rate_limit_per_minute": 10
+  "rate_limit_per_minute": 10,
+  "rate_limit_per_hour": 20,
+  "rate_limit_per_day": 100,
+  "min_think_time": 3.0,
+  "max_think_time": 15.0,
+  "work_hours_start": 9,
+  "work_hours_end": 22,
+  "work_days": [0, 1, 2, 3, 4],
+  "max_daily_runtime_hours": 8.0
 }
 ```
 
-| 配置项 | 类型 | 默认值 | 说明 |
-|--------|------|--------|------|
-| `http_port` | int | 8080 | HTTP API 服务器端口 |
-| `poll_interval` | int | 5 | 消息轮询间隔（秒） |
-| `monitored_groups` | list | [] | 监听的群聊名称列表 |
-| `bot_name` | str | "" | 机器人的微信昵称（用于检测 @提及） |
-| `ai_base_url` | str | "" | OpenAI 兼容 API 地址 |
-| `ai_api_key` | str | "" | API 密钥 |
-| `ai_model` | str | "gpt-3.5-turbo" | 使用的 AI 模型名称 |
-| `system_prompt` | str | "" | AI 系统提示词（为空时使用内置默认提示词） |
-| `max_reply_chars` | int | 1000 | AI 回复最大字符数 |
-| `ai_timeout` | int | 30 | AI 请求超时（秒） |
-| `rate_limit_per_minute` | int | 10 | 每分钟最大 AI 调用次数 |
+详细的防封号配置说明请参考 [docs/AVOID_BAN.md](docs/AVOID_BAN.md)。
 
-### HTTP API 文档
+### API 端点
 
 #### 发送消息
 
@@ -271,8 +271,8 @@ Content-Type: application/json
 **成功响应 (200):**
 ```json
 {
-  "success": true,
-  "message": "消息已发送"
+  "ok": true,
+  "message": "Message sent successfully"
 }
 ```
 
@@ -285,40 +285,56 @@ GET /api/v1/status
 **响应 (200):**
 ```json
 {
-  "wechat": { "running": true, "version": "4.0.x", "window_found": true },
-  "listener": { "running": true, "monitored_groups": ["群聊1"] },
-  "ai": { "configured": true, "model": "gpt-3.5-turbo" }
+  "ok": true,
+  "wechat_status": {
+    "running": true,
+    "version": "4.0.x",
+    "window_found": true
+  }
 }
 ```
 
-#### 查询配置
+#### 查询防封号统计
 
 ```
-GET /api/v1/config
-```
-
-返回当前运行时配置（API 密钥脱敏显示）。
-
-#### 更新配置
-
-```
-PUT /api/v1/config
-Content-Type: application/json
-
-{
-  "poll_interval": 10,
-  "rate_limit_per_minute": 20
-}
+GET /api/v1/anti-ban/stats
 ```
 
 **响应 (200):**
 ```json
 {
-  "success": true,
-  "message": "配置已更新",
-  "config": { "..." }
+  "ok": true,
+  "rate_limiter": {
+    "last_minute": 2,
+    "last_hour": 15,
+    "last_day": 87,
+    "limit_minute": 10,
+    "limit_hour": 20,
+    "limit_day": 100
+  },
+  "work_time": {
+    "is_work_time": true,
+    "current_hour": 14,
+    "work_hours": "9-22",
+    "current_day": 1,
+    "work_days": [0, 1, 2, 3, 4]
+  },
+  "runtime": {
+    "current_runtime_seconds": 7234,
+    "current_runtime_hours": 2.01,
+    "max_daily_hours": 8.0,
+    "remaining_hours": 5.99
+  }
 }
 ```
+
+#### 查询防封号配置
+
+```
+GET /api/v1/anti-ban/config
+```
+
+返回当前防封号相关配置的详细信息。
 
 ## 🔄 自动化任务与消息报备
 
@@ -371,11 +387,6 @@ def send_deployment_notification(status, details):
 # 在CI/CD流程中调用
 if __name__ == "__main__":
     send_deployment_notification("成功", "版本v2.1.0已部署到生产环境")
-```
-
-```bash
-cd examples
-python mcp_client_example.py
 ```
 
 ## 🔧 MCP协议实现
@@ -540,11 +551,10 @@ python mcp_client_example.py
 - [x] ~~剪贴板输入技术~~ ✅ **已完成**
 - [x] ~~多种发送方式支持~~ ✅ **已完成**
 - [x] ~~输入法兼容性问题~~ ✅ **已完成**
-- [x] ~~群聊@提及自动回复~~ ✅ **已完成**
 - [x] ~~HTTP RESTful API~~ ✅ **已完成**
-- [x] ~~AI 集成（OpenAI 兼容）~~ ✅ **已完成**
+- [x] ~~防封号保护系统~~ ✅ **已完成**
 - [ ] 支持macOS和Linux系统
-- [ ] 增加更多微信操作功能（如发送图片、文件等）
+- [ ] 增加更多微信操作功能（如图片、视频等）
 
 
 ## 💖 支持我们

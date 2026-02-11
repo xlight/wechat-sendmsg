@@ -9,24 +9,21 @@
 
 ## 项目概述
 
-这是一个符合 Model Context Protocol (MCP) 标准的微信自动化服务器，专为 AI 助手设计。它使用 Python 实现，通过 pyautogui 和 win32gui 进行微信窗口自动化操作，并支持群聊 AI 自动回复和 HTTP API。
+这是一个 HTTP API 驱动的微信消息发送工具，支持 MCP (Model Context Protocol) 协议集成，专为 AI 助手和自动化任务设计。它使用 Python 实现，通过 pyautogui 和 win32gui 进行微信窗口自动化操作。
 
 **核心技术栈:**
 - Python 3.8+
-- JSON-RPC 2.0 协议
+- JSON-RPC 2.0 协议 (用于 MCP)
 - MCP 协议 (2024-11-05)
 - Windows GUI 自动化 (pyautogui, win32gui, pywin32)
-- 异步 HTTP 服务 (aiohttp)
-- OpenAI 兼容 API (httpx)
+- Python 标准库 HTTP 服务器 (http.server)
 
 **主要功能模块:**
 - MCP 服务器 (src/mcp_server.py)
 - 微信控制器 (src/wechat_controller.py)
-- 群聊消息监听 (src/message_listener.py)
-- AI 集成 (src/ai_integration.py)
 - HTTP API 服务器 (src/http_server.py)
-- 自动回复编排器 (src/auto_reply.py)
 - 配置管理 (src/config.py)
+- 防封号保护系统 (src/anti_ban/)
 
 ## 项目结构
 
@@ -36,23 +33,21 @@ chatwe-automate/
 │   ├── __init__.py               # 包初始化
 │   ├── mcp_server.py             # MCP 服务器核心实现
 │   ├── wechat_controller.py      # 微信自动化控制器
-│   ├── message_listener.py       # 群聊消息监听器
-│   ├── ai_integration.py         # AI 服务对接（OpenAI 兼容）
 │   ├── http_server.py            # HTTP API 服务器
-│   ├── auto_reply.py             # 自动回复编排器 & 启动入口
-│   └── config.py                 # 配置管理模块
+│   ├── config.py                 # 配置管理模块
+│   └── anti_ban/                 # 防封号保护系统
 ├── examples/
 │   └── mcp_client_example.py     # MCP 客户端示例
 ├── docs/
-│   └── QUICK_START.md            # 快速开始指南
+│   ├── QUICK_START.md            # 快速开始指南
+│   └── AVOID_BAN.md              # 防封号指南
 ├── openspec/                     # OpenSpec 规范目录
 │   ├── specs/                    # 主规范
 │   └── changes/                  # 变更记录
-├── config.json                   # 自动回复配置文件（运行时自动生成）
+├── config.json                   # 配置文件（运行时自动生成）
 ├── mcp_config.json               # MCP 配置文件
 ├── mcp_server.py                 # 根目录 MCP 服务器入口点
 ├── test_server.py                # MCP 服务器测试脚本
-├── test_auto_reply.py            # 自动回复单元测试
 ├── test_send_chinese.py          # 中文发送测试
 ├── requirements.txt              # Python 依赖
 ├── AGENTS.md                     # 本文档
@@ -78,21 +73,12 @@ python -m unittest discover -s . -p "test_*.py"
 # 测试 MCP 服务器 (不实际发送消息)
 python test_server.py
 
-# 测试自动回复功能（单元测试）
-python test_auto_reply.py
-
 # 测试中文消息发送 (需要微信运行)
 python test_send_chinese.py
 ```
 
 **运行特定测试类或方法:**
 ```bash
-# 运行特定测试类
-python -m unittest test_auto_reply.TestConfig
-
-# 运行特定测试方法
-python -m unittest test_auto_reply.TestConfig.test_defaults
-
 # 运行单个异步测试函数
 python -c "from test_server import test_mcp_server; import asyncio; asyncio.run(test_mcp_server())"
 ```
@@ -106,9 +92,9 @@ python mcp_server.py
 python src/mcp_server.py
 ```
 
-**启动自动回复服务 (群聊监听 + HTTP API):**
+**启动 HTTP API 服务器:**
 ```bash
-python src/auto_reply.py
+python src/http_server.py
 ```
 
 **手动测试客户端:**

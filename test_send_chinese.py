@@ -4,10 +4,10 @@ import os
 import sys
 import logging
 
-# 将 src 目录添加到 sys.path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+# 将项目根目录添加到 sys.path
+sys.path.insert(0, os.path.dirname(__file__))
 
-from wechat_controller import WeChatController
+from src.wechat_controller import WeChatController
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')

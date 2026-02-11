@@ -8,9 +8,9 @@ import sys
 import os
 import time
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from wechat_controller import WeChatController
+from src.wechat_controller import WeChatController
 
 # 测试的群聊名称列表
 test_names = [
