@@ -2,18 +2,17 @@
 
 ## 目录
 
-- [MCP 服务器快速部署](#mcp-服务器快速部署)
-- [HTTP API 服务器快速部署](#http-api-服务器快速部署)
+- [环境准备](#环境准备)
+- [MCP 服务器部署（stdio 模式）](#mcp-服务器部署stdio-模式)
+- [统一服务器部署（streamable-http 模式）](#统一服务器部署streamable-http-模式)
 
 ---
 
-## MCP 服务器快速部署
+## 环境准备
 
-### 步骤1: 环境准备
-
-1. **确保Python环境**
+1. **确保 Python 环境**
    ```bash
-   python --version  # 需要Python 3.8+
+   python --version  # 需要 Python 3.10+（MCP SDK 要求）
    ```
 
 2. **安装依赖包**
@@ -32,9 +31,15 @@
    - 设置「打开微信」快捷键为 `Ctrl+Alt+W`（与 `config.json` 中 `wechat_hotkey` 一致）
    - 配置后系统会优先通过快捷键激活微信窗口，未配置时自动回退到 Win32 API 方式
 
-### 步骤2: 测试MCP服务器
+---
 
-运行测试脚本验证功能：
+## MCP 服务器部署（stdio 模式）
+
+stdio 模式通过标准输入/输出与 AI 助手通信，适合集成到 Claude Desktop 等工具。
+
+### 步骤1: 测试 MCP 服务器
+
+运行示例客户端验证功能：
 
 ```bash
 cd examples
@@ -43,20 +48,23 @@ python mcp_client_example.py
 
 如果看到类似输出，说明服务器工作正常：
 ```
-MCP Server started
-Initialize response: {'jsonrpc': '2.0', 'result': {...}, 'id': 1}
-Tools list: {'jsonrpc': '2.0', 'result': {'tools': [...]}, 'id': 2}
+正在以 stdio 模式启动 MCP 服务器...
+已连接到服务器: wechat-mcp-server v2.0.0
+协议版本: 2024-11-05
+可用工具 (2 个):
+  - send_wechat_message: 向微信联系人或群组发送文本消息。
+  - schedule_wechat_message: 安排在延迟后发送微信消息。
 ```
 
-### 步骤3: 配置AI助手
+### 步骤2: 配置 AI 助手
 
-#### 对于Claude Desktop:
+#### 对于 Claude Desktop:
 
-1. 打开Claude Desktop配置文件：
+1. 打开 Claude Desktop 配置文件：
    - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
    - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
 
-2. 添加MCP服务器配置：
+2. 添加 MCP 服务器配置：
    ```json
    {
      "mcpServers": {
@@ -69,15 +77,15 @@ Tools list: {'jsonrpc': '2.0', 'result': {'tools': [...]}, 'id': 2}
    }
    ```
 
-3. 重启Claude Desktop
+3. 重启 Claude Desktop
 
-#### 对于其他AI助手:
+#### 对于其他 AI 助手:
 
-参考各自的MCP配置文档，使用相同的服务器路径和参数。
+参考各自的 MCP 配置文档，使用相同的服务器路径和参数。
 
-### 步骤4: 开始使用
+### 步骤3: 开始使用
 
-在AI助手中尝试以下命令：
+在 AI 助手中尝试以下命令：
 
 1. **发送简单消息**
    ```
@@ -94,56 +102,11 @@ Tools list: {'jsonrpc': '2.0', 'result': {'tools': [...]}, 'id': 2}
    "给张三发微信：明天的会议改到下午3点"
    ```
 
-### 常见问题快速解决
-
-#### 问题1: 找不到微信窗口
-**解决方案:**
-- 确保微信已启动
-- 检查微信窗口是否可见
-- 尝试点击微信窗口使其获得焦点
-
-#### 问题2: 联系人找不到
-**解决方案:**
-- 确保联系人名称完全正确
-- 先手动搜索一次该联系人
-- 使用"文件传输助手"进行测试
-
-#### 问题3: MCP连接失败
-**解决方案:**
-- 检查Python路径是否正确
-- 验证依赖包是否安装完整
-- 查看AI助手的错误日志
-
-### 高级配置
-
-#### 自定义快捷键
-本项目支持通过全局快捷键激活微信窗口。在 `config.json` 中配置：
-```json
-{
-  "wechat_hotkey": "ctrl+alt+w"
-}
-```
-需要在微信「设置 → 快捷键」中配置相同的组合键。如果快捷键未配置或激活失败，系统会自动回退到 Win32 API 方式激活窗口。
-
-#### 日志级别调整
-在 `mcp_server.py` 中修改日志级别：
-```python
-logging.basicConfig(level=logging.DEBUG)  # 更详细的日志
-```
-
-#### 添加更多联系人
-建议在微信中将常用联系人置顶，这样搜索会更快更准确。
-
 ---
 
-## HTTP API 服务器快速部署
+## 统一服务器部署（streamable-http 模式）
 
-### 功能介绍
-
-HTTP API 服务器提供 RESTful 接口，用于：
-- 发送文本消息到微信联系人或群聊
-- 查询微信状态
-- 查询防封号统计和配置
+streamable-http 模式在同一个端口上同时提供 MCP 端点和 HTTP API，适合自动化脚本和外部系统集成。
 
 ### 步骤1: 配置服务器
 
@@ -151,7 +114,7 @@ HTTP API 服务器提供 RESTful 接口，用于：
 
 ```json
 {
-  "http_port": 8080,
+  "http_port": 8765,
   "rate_limit_per_minute": 10,
   "rate_limit_per_hour": 20,
   "rate_limit_per_day": 100,
@@ -167,142 +130,104 @@ HTTP API 服务器提供 RESTful 接口，用于：
 ### 步骤2: 启动服务器
 
 ```bash
-python src/http_server.py
+python src/mcp_server.py --transport streamable-http
+```
+
+可选参数：
+```bash
+# 指定端口（默认读取 config.json 中的 http_port）
+python src/mcp_server.py --transport streamable-http --port 8765
+
+# 指定监听地址
+python src/mcp_server.py --transport streamable-http --host 127.0.0.1
 ```
 
 启动后你会看到：
 ```
-2026-02-11 15:30:00 - HTTP 服务器已启动: http://0.0.0.0:8080
-2026-02-11 15:30:00 - 可用端点:
-2026-02-11 15:30:00 -   POST /api/v1/messages/send - 发送消息
-2026-02-11 15:30:00 -   GET  /api/v1/status - 查询状态
-2026-02-11 15:30:00 -   GET  /api/v1/anti-ban/stats - 防封号统计
-2026-02-11 15:30:00 -   GET  /api/v1/anti-ban/config - 防封号配置
+以 streamable-http 模式启动统一服务器: http://0.0.0.0:8765
+可用端点:
+  MCP:  http://0.0.0.0:8765/mcp
+  API:  http://0.0.0.0:8765/api/v1/...
+  Web:  http://0.0.0.0:8765/
 ```
 
-### 步骤3: 测试 API
+### 步骤3: 测试
 
-1. **发送消息**
-   
+1. **通过 MCP 客户端测试**
    ```bash
-   curl -X POST http://localhost:8080/api/v1/messages/send \
+   cd examples
+   python mcp_client_example.py --transport streamable-http --url http://localhost:8765/mcp
+   ```
+
+2. **通过 HTTP API 发送消息**
+   ```bash
+   curl -X POST http://localhost:8765/api/v1/messages/send \
      -H "Content-Type: application/json" \
      -d '{"contact_name": "文件传输助手", "message": "Hello from HTTP API!"}'
    ```
-   
-   响应：
-   ```json
-   {
-     "ok": true,
-     "message": "Message sent successfully"
-   }
-   ```
 
-2. **查询状态**
-   
+3. **查询状态**
    ```bash
-   curl http://localhost:8080/api/v1/status
-   ```
-   
-   响应：
-   ```json
-   {
-     "ok": true,
-     "wechat_status": {
-       "running": true,
-       "version": "4.0.x",
-       "window_found": true
-     }
-   }
+   curl http://localhost:8765/api/v1/status
    ```
 
-3. **查询防封号统计**
-   
+4. **查询防封号统计**
    ```bash
-   curl http://localhost:8080/api/v1/anti-ban/stats
+   curl http://localhost:8765/api/v1/anti-ban/stats
    ```
 
-### 步骤4: 停止服务
+### 可用端点一览
 
-按 `Ctrl+C` 停止服务：
-```
-^C收到停止信号，正在关闭服务器...
-HTTP 服务器已关闭
-```
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/mcp` | POST | MCP Streamable HTTP 端点 |
+| `/api/v1/messages/send` | POST | 发送消息 |
+| `/api/v1/status` | GET | 查询微信状态 |
+| `/api/v1/anti-ban/stats` | GET | 防封号统计 |
+| `/api/v1/anti-ban/config` | GET | 防封号配置 |
+| `/` | GET | Web 首页 |
+| `/test` | GET | 测试页面 |
+| `/static/*` | GET | 静态文件 |
 
-### 常见问题快速解决
+---
 
-#### 问题1: HTTP API 无法访问
-**解决方案:**
-- 检查 `http_port` 是否被其他程序占用
-- 确认防火墙未阻止该端口
-- 验证服务是否成功启动（查看日志）
+## 常见问题快速解决
 
-#### 问题2: 找不到微信窗口
-**解决方案:**
+#### 找不到微信窗口
 - 确保微信已启动并登录
+- 检查微信窗口是否可见
 - 微信最小化到托盘时系统会自动恢复
 - 确保微信版本为 4.0 及以上 NT 框架版本
 
-#### 问题3: 联系人找不到
-**解决方案:**
+#### 联系人找不到
 - 确保联系人名称完全正确
 - 先手动在微信中搜索一次该联系人
 - 使用"文件传输助手"进行测试
 
-### HTTP API 参考
+#### MCP 连接失败
+- 检查 Python 版本是否为 3.10+
+- 验证依赖包是否安装完整（`pip install -r requirements.txt`）
+- 查看 AI 助手的错误日志
 
-#### 发送消息
-```bash
-POST /api/v1/messages/send
-Content-Type: application/json
+## 高级配置
 
-{
-  "contact_name": "联系人名称",
-  "message": "消息内容"
-}
-```
-
-#### 查询状态
-```bash
-GET /api/v1/status
-```
-
-#### 查询防封号统计
-```bash
-GET /api/v1/anti-ban/stats
-```
-
-#### 查询防封号配置
-```bash
-GET /api/v1/anti-ban/config
-```
-
-### 高级配置
-
-#### 调整速率限制
-
-编辑 `config.json`：
+### 自定义快捷键
+在 `config.json` 中配置微信激活快捷键：
 ```json
 {
-  "rate_limit_per_minute": 20,
-  "rate_limit_per_hour": 50,
-  "rate_limit_per_day": 200
+  "wechat_hotkey": "ctrl+alt+w"
 }
 ```
+需要在微信「设置 → 快捷键」中配置相同的组合键。
 
-#### 调整工作时间
-
-```json
-{
-  "work_hours_start": 8,
-  "work_hours_end": 23,
-  "work_days": [0, 1, 2, 3, 4, 5, 6],
-  "max_daily_runtime_hours": 12.0
-}
+### 日志级别调整
+修改 `src/mcp_server.py` 中的日志级别：
+```python
+logging.basicConfig(level=logging.DEBUG)  # 更详细的日志
 ```
 
-**注意**: 更多防封号配置说明请参考 [docs/AVOID_BAN.md](../docs/AVOID_BAN.md)。
+### 防封号配置
+详见 [AVOID_BAN.md](AVOID_BAN.md)。
 
 ---
 

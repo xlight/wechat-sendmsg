@@ -1,326 +1,377 @@
 #!/usr/bin/env python3
 """
 微信 MCP 服务器
-用于发送微信消息的模型上下文协议服务器。
+使用官方 MCP Python SDK (FastMCP) 实现，支持 stdio 和 Streamable HTTP 传输。
+Streamable HTTP 模式下同时提供 HTTP API 端点和 MCP 端点（统一 Starlette 应用）。
 """
 
+import argparse
 import asyncio
-import json
-import sys
-from typing import Any, Dict, List, Optional, Union
 import logging
-import io
+import os
+import sys
+from contextlib import asynccontextmanager
+from datetime import datetime
+from typing import Any, Dict, Optional
 
-# 设置标准输出编码为UTF-8
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-sys.stdin = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8')
+from mcp.server.fastmcp import FastMCP
+from starlette.applications import Starlette
+from starlette.middleware import Middleware
+from starlette.middleware.cors import CORSMiddleware
+from starlette.requests import Request
+from starlette.responses import FileResponse, JSONResponse
+from starlette.routing import Mount, Route
+from starlette.staticfiles import StaticFiles
 
-# MCP 协议类型
-class JSONRPCRequest:
-    def __init__(self, method: str, params: Optional[Dict[str, Any]] = None, id: Optional[Union[str, int]] = None):
-        self.jsonrpc = "2.0"
-        self.method = method
-        self.params = params or {}
-        self.id = id
+# 确保可以导入同级模块
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-class JSONRPCResponse:
-    def __init__(self, result: Optional[Any] = None, error: Optional[Dict[str, Any]] = None, id: Optional[Union[str, int]] = None):
-        self.jsonrpc = "2.0"
-        self.result = result
-        self.error = error
-        self.id = id
-    
-    def to_dict(self) -> Dict[str, Any]:
-        response = {"jsonrpc": self.jsonrpc}
-        if self.result is not None:
-            response["result"] = self.result
-        if self.error is not None:
-            response["error"] = self.error
-        if self.id is not None:
-            response["id"] = self.id
-        return response
+from config import Config
+from wechat_controller import WeChatController
 
-class MCPServer:
-    """微信消息传递的 MCP 服务器实现。"""
-    
-    def __init__(self):
-        self.name = "wechat-mcp-server"
-        self.version = "1.0.0"
-        self.initialized = False
-        self.capabilities = {
-            "tools": {}
-        }
-        self.tools = []
-        self._setup_logging()
-        self._register_tools()
-    
-    def _setup_logging(self):
-        """设置日志配置。"""
-        logging.basicConfig(
-            level=logging.DEBUG,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+# ── 日志配置 ──
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+# ── 全局单例 ──
+config = Config()
+controller = WeChatController(config=config)
+
+# ── 防封号模块（可选） ──
+rate_limiter = None
+work_time_controller = None
+
+try:
+    from anti_ban.enhanced_rate_limiter import EnhancedRateLimiter
+    from anti_ban.work_time_controller import WorkTimeController
+
+    rate_limiter = EnhancedRateLimiter(
+        limit_per_minute=config.rate_limit_per_minute,
+        limit_per_hour=config.rate_limit_per_hour,
+        limit_per_day=config.rate_limit_per_day,
+    )
+    work_time_controller = WorkTimeController(
+        work_hours_start=config.work_hours_start,
+        work_hours_end=config.work_hours_end,
+        work_days=config.work_days,
+        max_daily_runtime_hours=config.max_daily_runtime_hours,
+    )
+    logger.info("防封号模块已加载")
+except ImportError:
+    logger.warning("防封号模块未加载，相关端点将不可用")
+
+
+# ==============================================================================
+# MCP 服务器 — 工具注册
+# ==============================================================================
+
+mcp = FastMCP(
+    "wechat-mcp-server",
+    instructions="微信消息发送 MCP 服务器，支持向联系人或群组发送文本消息。",
+    streamable_http_path="/",  # Mount 到 /mcp 后最终路径为 /mcp
+)
+
+
+@mcp.tool()
+async def send_wechat_message(contact_name: str, message: str) -> str:
+    """向微信联系人或群组发送文本消息。
+
+    Args:
+        contact_name: 要发送消息的微信联系人或群组名称
+        message: 要发送的文本消息内容
+    """
+    result = await controller.send_text_message(contact_name, message)
+
+    if isinstance(result, dict) and result.get("ok"):
+        return f"消息已成功发送给 {contact_name}"
+
+    # 构建失败描述
+    if isinstance(result, dict):
+        stage = result.get("stage", "unknown")
+        reason = result.get("reason", "unknown")
+        version = result.get("wechat_version")
+        is_nt = result.get("is_nt_framework")
+        return (
+            f"消息发送失败: stage={stage}, reason={reason}, "
+            f"wechat_version={version}, nt={is_nt}"
         )
-        self.logger = logging.getLogger(self.name)
-    
-    def _register_tools(self):
-        """注册可用的 MCP 工具。"""
-        self.tools = [
-            {
-                "name": "send_wechat_message",
-                "description": "向微信联系人或群组发送文本消息",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "contact_name": {
-                            "type": "string",
-                            "description": "要发送消息的微信联系人或群组名称"
-                        },
-                        "message": {
-                            "type": "string",
-                            "description": "要发送的文本消息内容"
-                        }
-                    },
-                    "required": ["contact_name", "message"]
-                }
-            },
-            {
-                "name": "schedule_wechat_message",
-                "description": "安排在延迟后发送微信消息",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "contact_name": {
-                            "type": "string",
-                            "description": "要发送消息的微信联系人或群组名称"
-                        },
-                        "message": {
-                            "type": "string",
-                            "description": "要发送的文本消息内容"
-                        },
-                        "delay_seconds": {
-                            "type": "number",
-                            "description": "发送消息前的延迟秒数"
-                        }
-                    },
-                    "required": ["contact_name", "message", "delay_seconds"]
-                }
-            }
-        ]
-    
-    async def handle_request(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
-        """处理传入的 JSON-RPC 请求。"""
-        try:
-            method = request_data.get("method")
-            params = request_data.get("params", {})
-            request_id = request_data.get("id")
-            
-            self.logger.info(f"处理请求: {method}")
-            
-            if method == "initialize":
-                return await self._handle_initialize(params, request_id)
-            elif method == "tools/list":
-                return await self._handle_tools_list(request_id)
-            elif method == "tools/call":
-                return await self._handle_tools_call(params, request_id)
-            else:
-                error = {
-                    "code": -32601,
-                    "message": f"方法未找到: {method}"
-                }
-                return JSONRPCResponse(error=error, id=request_id).to_dict()
-                
-        except Exception as e:
-            self.logger.error(f"Error handling request: {e}")
-            error = {
-                "code": -32603,
-                "message": f"Internal error: {str(e)}"
-            }
-            return JSONRPCResponse(error=error, id=request_data.get("id")).to_dict()
-    
-    async def _handle_initialize(self, params: Dict[str, Any], request_id: Optional[Union[str, int]]) -> Dict[str, Any]:
-        """处理 MCP 初始化请求。"""
-        self.initialized = True
-        
-        result = {
-            "protocolVersion": "2024-11-05",
-            "capabilities": self.capabilities,
-            "serverInfo": {
-                "name": self.name,
-                "version": self.version
-            }
-        }
-        
-        self.logger.info("Server initialized successfully")
-        return JSONRPCResponse(result=result, id=request_id).to_dict()
-    
-    async def _handle_tools_list(self, request_id: Optional[Union[str, int]]) -> Dict[str, Any]:
-        """处理 tools/list 请求。"""
-        if not self.initialized:
-            error = {
-                "code": -32002,
-                "message": "Server not initialized"
-            }
-            return JSONRPCResponse(error=error, id=request_id).to_dict()
-        
-        result = {"tools": self.tools}
-        return JSONRPCResponse(result=result, id=request_id).to_dict()
-    
-    async def _handle_tools_call(self, params: Dict[str, Any], request_id: Optional[Union[str, int]]) -> Dict[str, Any]:
-        """处理 tools/call 请求。"""
-        if not self.initialized:
-            error = {
-                "code": -32002,
-                "message": "Server not initialized"
-            }
-            return JSONRPCResponse(error=error, id=request_id).to_dict()
-        
-        tool_name = params.get("name")
-        arguments = params.get("arguments", {})
-        
-        if tool_name == "send_wechat_message":
-            return await self._execute_send_message(arguments, request_id)
-        elif tool_name == "schedule_wechat_message":
-            return await self._execute_schedule_message(arguments, request_id)
-        else:
-            error = {
-                "code": -32601,
-                "message": f"Unknown tool: {tool_name}"
-            }
-            return JSONRPCResponse(error=error, id=request_id).to_dict()
-    
-    async def _execute_send_message(self, arguments: Dict[str, Any], request_id: Optional[Union[str, int]]) -> Dict[str, Any]:
-        """执行 send_wechat_message 工具。"""
-        try:
-            contact_name = arguments.get("contact_name")
-            message = arguments.get("message")
-            
-            if not contact_name or not message:
-                error = {
-                    "code": -32602,
-                    "message": "Missing required parameters: contact_name and message"
-                }
-                return JSONRPCResponse(error=error, id=request_id).to_dict()
-            
-            # 导入并使用微信功能
-            from wechat_controller import WeChatController
-            
-            controller = WeChatController()
-            send_result = await controller.send_text_message(contact_name, message)
 
-            success = send_result if isinstance(send_result, bool) else bool(send_result.get("ok"))
+    return "消息发送失败: 未知错误"
 
-            if success:
-                result = {
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": "Message sent successfully"
-                        }
-                    ]
-                }
-            else:
-                if isinstance(send_result, dict):
-                    stage = send_result.get("stage")
-                    reason = send_result.get("reason")
-                    version = send_result.get("wechat_version")
-                    is_nt = send_result.get("is_nt_framework")
-                    extra = f" (stage={stage}, reason={reason}, wechat_version={version}, nt={is_nt})"
-                else:
-                    extra = ""
-                result = {
-                    "content": [
-                        {
-                            "type": "text", 
-                            "text": f"Failed to send message{extra}"
-                        }
-                    ]
-                }
-            
-            return JSONRPCResponse(result=result, id=request_id).to_dict()
-            
-        except Exception as e:
-            self.logger.error(f"Error executing send_message: {e}")
-            error = {
-                "code": -32603,
-                "message": f"Tool execution error: {str(e)}"
-            }
-            return JSONRPCResponse(error=error, id=request_id).to_dict()
-    
-    async def _execute_schedule_message(self, arguments: Dict[str, Any], request_id: Optional[Union[str, int]]) -> Dict[str, Any]:
-        """执行 schedule_wechat_message 工具。"""
-        try:
-            contact_name = arguments.get("contact_name")
-            message = arguments.get("message")
-            delay_seconds = arguments.get("delay_seconds")
-            
-            if not contact_name or not message or delay_seconds is None:
-                error = {
-                    "code": -32602,
-                    "message": "Missing required parameters: contact_name, message and delay_seconds"
-                }
-                return JSONRPCResponse(error=error, id=request_id).to_dict()
-            
-            # 导入并使用微信功能
-            from wechat_controller import WeChatController
-            
-            controller = WeChatController()
-            success = await controller.schedule_message(contact_name, message, delay_seconds)
-            
-            if success:
-                result = {
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": f"Message scheduled to be sent in {delay_seconds} seconds"
-                        }
-                    ]
-                }
-            else:
-                result = {
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": "Failed to schedule message"
-                        }
-                    ]
-                }
-            
-            return JSONRPCResponse(result=result, id=request_id).to_dict()
-            
-        except Exception as e:
-            self.logger.error(f"Error executing schedule_message: {e}")
-            error = {
-                "code": -32603,
-                "message": f"Tool execution error: {str(e)}"
-            }
-            return JSONRPCResponse(error=error, id=request_id).to_dict()
 
-async def main():
-    """MCP 服务器的主入口点。"""
-    server = MCPServer()
-    
-    # 从标准输入读取并写入标准输出进行 MCP 通信
-    while True:
-        try:
-            line = await asyncio.get_event_loop().run_in_executor(None, sys.stdin.readline)
-            if not line:
-                break
-                
-            request_data = json.loads(line.strip())
-            response = await server.handle_request(request_data)
-            
-            print(json.dumps(response, ensure_ascii=False, separators=(',', ':')))
-            sys.stdout.flush()
-            
-        except json.JSONDecodeError as e:
-            error_response = JSONRPCResponse(
-                error={"code": -32700, "message": f"解析错误: {str(e)}"}
-            ).to_dict()
-            print(json.dumps(error_response, ensure_ascii=False, separators=(',', ':')))
-            sys.stdout.flush()
-        except Exception as e:
-            server.logger.error(f"意外错误: {e}")
-            break
+@mcp.tool()
+async def schedule_wechat_message(
+    contact_name: str, message: str, delay_seconds: float
+) -> str:
+    """安排在延迟后发送微信消息。
+
+    Args:
+        contact_name: 要发送消息的微信联系人或群组名称
+        message: 要发送的文本消息内容
+        delay_seconds: 发送消息前的延迟秒数
+    """
+    success = await controller.schedule_message(contact_name, message, delay_seconds)
+
+    if success:
+        return f"消息已安排在 {delay_seconds} 秒后发送给 {contact_name}"
+    return "消息安排失败"
+
+
+# ==============================================================================
+# HTTP API 端点（Starlette 路由）
+# ==============================================================================
+
+
+async def handle_send_message(request: Request) -> JSONResponse:
+    """处理发送消息请求 — POST /api/v1/messages/send"""
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(
+            {"ok": False, "error": "无效的 JSON 请求体"}, status_code=400
+        )
+
+    contact_name = body.get("contact_name")
+    message = body.get("message")
+
+    if not contact_name:
+        return JSONResponse(
+            {"ok": False, "error": "缺少必填参数: contact_name"}, status_code=400
+        )
+    if not message:
+        return JSONResponse(
+            {"ok": False, "error": "缺少必填参数: message"}, status_code=400
+        )
+
+    try:
+        result = await controller.send_text_message(contact_name, message)
+        if result.get("ok"):
+            return JSONResponse({"ok": True, "message": "Message sent successfully"})
+        return JSONResponse(
+            {"ok": False, "error": "Failed to send message", "details": result},
+            status_code=500,
+        )
+    except Exception as e:
+        logger.error("发送消息时出错", exc_info=True)
+        return JSONResponse(
+            {"ok": False, "error": f"Internal error: {e}"}, status_code=500
+        )
+
+
+async def handle_status(request: Request) -> JSONResponse:
+    """处理状态查询请求 — GET /api/v1/status"""
+    wechat_status = controller.get_status()
+    return JSONResponse({"ok": True, "wechat_status": wechat_status})
+
+
+async def handle_anti_ban_stats(request: Request) -> JSONResponse:
+    """处理防封号统计查询请求 — GET /api/v1/anti-ban/stats"""
+    if not rate_limiter or not work_time_controller:
+        return JSONResponse(
+            {"ok": False, "error": "Anti-ban tools not initialized"}, status_code=503
+        )
+
+    rate_stats = rate_limiter.get_stats()
+    is_work_time = work_time_controller.is_work_time()
+    runtime = work_time_controller.get_runtime()
+    max_runtime = config.max_daily_runtime_hours * 3600
+
+    return JSONResponse({
+        "ok": True,
+        "rate_limiter": rate_stats,
+        "work_time": {
+            "is_work_time": is_work_time,
+            "current_hour": datetime.now().hour,
+            "work_hours": f"{config.work_hours_start}-{config.work_hours_end}",
+            "current_day": datetime.now().weekday(),
+            "work_days": config.work_days,
+        },
+        "runtime": {
+            "current_runtime_seconds": runtime,
+            "current_runtime_hours": runtime / 3600,
+            "max_daily_hours": config.max_daily_runtime_hours,
+            "remaining_hours": max((max_runtime - runtime) / 3600, 0),
+        },
+    })
+
+
+async def handle_anti_ban_config(request: Request) -> JSONResponse:
+    """处理防封号配置查询请求 — GET /api/v1/anti-ban/config"""
+    return JSONResponse({
+        "ok": True,
+        "rate_limits": {
+            "per_minute": config.rate_limit_per_minute,
+            "per_hour": config.rate_limit_per_hour,
+            "per_day": config.rate_limit_per_day,
+        },
+        "human_behavior": {
+            "min_think_time": config.min_think_time,
+            "max_think_time": config.max_think_time,
+            "min_random_delay": config.min_random_delay,
+            "max_random_delay": config.max_random_delay,
+        },
+        "work_time": {
+            "hours": f"{config.work_hours_start}-{config.work_hours_end}",
+            "days": config.work_days,
+            "max_daily_runtime_hours": config.max_daily_runtime_hours,
+        },
+        "content_diversification": {
+            "prefix_probability": config.prefix_probability,
+            "suffix_probability": config.suffix_probability,
+            "skip_probability": config.random_skip_probability,
+        },
+        "gui_operations": {
+            "offset_range": config.gui_offset_range,
+            "move_duration": (
+                f"{config.gui_move_duration_min}-{config.gui_move_duration_max}s"
+            ),
+            "pause": f"{config.gui_pause_min}-{config.gui_pause_max}s",
+        },
+    })
+
+
+async def handle_index(request: Request) -> FileResponse:
+    """根路径返回 index.html — GET /"""
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    index_path = os.path.join(base_dir, "static", "index.html")
+    if os.path.isfile(index_path):
+        return FileResponse(index_path, media_type="text/html")
+    return JSONResponse({"error": "index.html not found"}, status_code=404)
+
+
+async def handle_test_page(request: Request) -> FileResponse:
+    """测试页面 — GET /test"""
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    test_path = os.path.join(base_dir, "static", "test.html")
+    if os.path.isfile(test_path):
+        return FileResponse(test_path, media_type="text/html")
+    return JSONResponse({"error": "test.html not found"}, status_code=404)
+
+
+# ==============================================================================
+# 统一 Starlette 应用（HTTP API + MCP Streamable HTTP）
+# ==============================================================================
+
+
+def create_starlette_app() -> Starlette:
+    """创建统一的 Starlette ASGI 应用。
+
+    包含：
+    - MCP Streamable HTTP 端点 (/mcp)
+    - HTTP API 端点 (/api/v1/*)
+    - 静态文件服务 (/static/*)
+    - 根路径和测试页面
+    """
+    # 获取 MCP 的 streamable HTTP ASGI 子应用
+    mcp_app = mcp.streamable_http_app()
+
+    # 从 mcp_app 中提取 StreamableHTTPASGIApp 端点
+    # mcp_app 内部有一个 Route("/", endpoint=StreamableHTTPASGIApp)
+    # 我们直接将它注册到顶层的 /mcp 路由，避免 Mount 导致的 307 重定向
+    mcp_endpoint = mcp_app.routes[0].endpoint
+
+    # 项目根目录下的 static 文件夹
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    static_dir = os.path.join(base_dir, "static")
+
+    # 构建路由
+    routes = [
+        # MCP Streamable HTTP 端点 — 直接注册避免 Mount 的尾斜杠重定向
+        Route("/mcp", endpoint=mcp_endpoint),
+        # HTTP API 端点
+        Route("/api/v1/messages/send", handle_send_message, methods=["POST"]),
+        Route("/api/v1/status", handle_status, methods=["GET"]),
+        Route("/api/v1/anti-ban/stats", handle_anti_ban_stats, methods=["GET"]),
+        Route("/api/v1/anti-ban/config", handle_anti_ban_config, methods=["GET"]),
+        # 页面路由
+        Route("/", handle_index, methods=["GET"]),
+        Route("/test", handle_test_page, methods=["GET"]),
+    ]
+
+    # 静态文件服务（如果目录存在）
+    if os.path.isdir(static_dir):
+        routes.append(Mount("/static", app=StaticFiles(directory=static_dir)))
+
+    @asynccontextmanager
+    async def lifespan(app: Starlette):
+        """管理 MCP session_manager 的生命周期。"""
+        async with mcp.session_manager.run():
+            logger.info("MCP session manager 已启动")
+            yield
+        logger.info("MCP session manager 已关闭")
+
+    # CORS 中间件
+    middleware = [
+        Middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_methods=["GET", "POST", "OPTIONS", "DELETE"],
+            allow_headers=["*"],
+            expose_headers=["Mcp-Session-Id"],
+        ),
+    ]
+
+    app = Starlette(
+        routes=routes,
+        middleware=middleware,
+        lifespan=lifespan,
+    )
+
+    return app
+
+
+# ==============================================================================
+# 入口点
+# ==============================================================================
+
+
+def main():
+    """主入口点：解析命令行参数，选择传输模式启动服务器。"""
+    parser = argparse.ArgumentParser(description="微信 MCP 服务器")
+    parser.add_argument(
+        "--transport",
+        choices=["stdio", "streamable-http"],
+        default="stdio",
+        help="传输模式 (默认: stdio)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help="HTTP 服务器端口 (默认: 配置文件中的 http_port)",
+    )
+    parser.add_argument(
+        "--host",
+        default="0.0.0.0",
+        help="HTTP 服务器监听地址 (默认: 0.0.0.0)",
+    )
+
+    args = parser.parse_args()
+
+    if args.transport == "stdio":
+        # stdio 模式：仅 MCP 功能，通过标准输入/输出通信
+        logger.info("以 stdio 传输模式启动 MCP 服务器")
+        mcp.run(transport="stdio")
+
+    elif args.transport == "streamable-http":
+        # HTTP 模式：统一 Starlette 应用（MCP + HTTP API）
+        import uvicorn
+
+        port = args.port or config.http_port
+        host = args.host
+
+        logger.info(f"以 streamable-http 模式启动统一服务器: http://{host}:{port}")
+        logger.info("可用端点:")
+        logger.info(f"  MCP:  http://{host}:{port}/mcp")
+        logger.info(f"  API:  http://{host}:{port}/api/v1/...")
+        logger.info(f"  Web:  http://{host}:{port}/")
+
+        app = create_starlette_app()
+        uvicorn.run(app, host=host, port=port, log_level="info")
+
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

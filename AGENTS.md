@@ -12,19 +12,18 @@
 这是一个 HTTP API 驱动的微信消息发送工具，支持 MCP (Model Context Protocol) 协议集成，专为 AI 助手和自动化任务设计。它使用 Python 实现，通过 pyautogui 和 win32gui 进行微信窗口自动化操作。
 
 **核心技术栈:**
-- Python 3.8+
-- JSON-RPC 2.0 协议 (用于 MCP)
+- Python 3.10+
+- 官方 MCP Python SDK (FastMCP) + Starlette
 - MCP 协议 (2024-11-05)
 - Windows GUI 自动化 (pyautogui, win32gui, pywin32)
-- Python 标准库 HTTP 服务器 (http.server)
+- Uvicorn ASGI 服务器
 
 **主要功能模块:**
-- MCP 服务器 (src/mcp_server.py)
+- MCP 服务器 + HTTP API (src/mcp_server.py) — FastMCP + Starlette 统一应用
 - 微信控制器 (src/wechat_controller.py) - 主入口，组合 Mixin
   - 窗口查找 Mixin (src/window_finder.py)
   - 系统托盘管理 Mixin (src/tray_manager.py)
   - GUI 操作 Mixin (src/gui_operations.py)
-- HTTP API 服务器 (src/http_server.py)
 - 配置管理 (src/config.py)
 - 防封号保护系统 (src/anti_ban/)
 
@@ -34,28 +33,29 @@
 chatwe-automate/
 ├── src/
 │   ├── __init__.py               # 包初始化
-│   ├── mcp_server.py             # MCP 服务器核心实现
+│   ├── mcp_server.py             # MCP 服务器 + HTTP API（FastMCP + Starlette 统一应用）
 │   ├── wechat_controller.py      # 微信自动化控制器（主入口，组合 Mixin）
 │   ├── window_finder.py          # WindowFinderMixin: 版本检测、窗口查找、快捷键激活、Win32 API 激活
 │   ├── tray_manager.py           # TrayManagerMixin: 系统托盘图标查找与双击恢复
 │   ├── gui_operations.py         # GUIOperationsMixin: 输入框定位、剪贴板输入、搜索联系人、发送
-│   ├── http_server.py            # HTTP API 服务器
 │   ├── config.py                 # 配置管理模块
 │   └── anti_ban/                 # 防封号保护系统
 ├── examples/
-│   └── mcp_client_example.py     # MCP 客户端示例
+│   └── mcp_client_example.py     # MCP 客户端示例（支持 stdio / streamable-http）
 ├── docs/
 │   ├── QUICK_START.md            # 快速开始指南
 │   ├── AVOID_BAN.md              # 防封号指南
 │   ├── ANTI_BAN_GUIDE.md         # 防封号保护系统详细指南
 │   ├── TRAY_RECOVERY_IMPROVEMENT.md  # 托盘恢复机制说明
 │   └── WINDOW_DETECTION_FIXES.md     # 窗口检测修复说明
+├── static/
+│   ├── index.html                # Web 首页
+│   └── test.html                 # 测试页面
 ├── openspec/                     # OpenSpec 规范目录
 │   ├── specs/                    # 主规范
 │   └── changes/                  # 变更记录
 ├── config.json                   # 配置文件（运行时自动生成）
 ├── mcp_config.json               # MCP 配置文件
-├── mcp_server.py                 # 根目录 MCP 服务器入口点
 ├── test_server.py                # MCP 服务器测试脚本
 ├── test_send_chinese.py          # 中文发送测试
 ├── requirements.txt              # Python 依赖
@@ -94,22 +94,23 @@ python -c "from test_server import test_mcp_server; import asyncio; asyncio.run(
 
 ### 运行服务器
 
-**启动 MCP 服务器 (标准输入/输出模式):**
+**启动 MCP 服务器 (stdio 模式，默认):**
 ```bash
-python mcp_server.py
-# 或者
 python src/mcp_server.py
 ```
 
-**启动 HTTP API 服务器:**
+**启动统一服务器 (streamable-http 模式，MCP + HTTP API):**
 ```bash
-python src/http_server.py
+python src/mcp_server.py --transport streamable-http --port 8765
 ```
 
 **手动测试客户端:**
 ```bash
 cd examples
+# stdio 模式
 python mcp_client_example.py
+# streamable-http 模式
+python mcp_client_example.py --transport streamable-http --url http://localhost:8765/mcp
 ```
 
 ### 代码检查
@@ -380,14 +381,14 @@ dict_data = config.to_dict(mask_secrets=True)  # 序列化（脱敏）
 ### 添加新功能
 
 **添加新 MCP 工具:**
-1. 在 `src/mcp_server.py` 的 `_register_tools()` 中注册工具定义
-2. 在 `_handle_tools_call()` 中添加路由
-3. 实现 `_execute_<tool_name>()` 方法
-4. 如需新的微信操作，在 `WeChatController` 中实现底层功能
+1. 在 `src/mcp_server.py` 中使用 `@mcp.tool()` 装饰器注册新工具函数
+2. 实现工具逻辑，返回字符串结果（成功描述或错误描述）
+3. 如需新的微信操作，在 `WeChatController` 中实现底层功能
 
 **添加新 HTTP API 端点:**
-1. 在 `src/http_server.py` 中添加新的路由处理器
-2. 更新 README.md 的 API 文档
+1. 在 `src/mcp_server.py` 中编写 Starlette 异步路由处理函数
+2. 在 `create_starlette_app()` 的 `routes` 列表中注册路由
+3. 更新 README.md 的 API 文档
 
 ## 注意事项
 

@@ -5,7 +5,7 @@
 ![GitHub stars](https://img.shields.io/github/stars/1052666/WeChat-MCP-Server?style=social)
 ![GitHub forks](https://img.shields.io/github/forks/1052666/WeChat-MCP-Server?style=social)
 ![GitHub license](https://img.shields.io/github/license/1052666/WeChat-MCP-Server)
-![Python version](https://img.shields.io/badge/python-3.8%2B-blue)
+![Python version](https://img.shields.io/badge/python-3.10%2B-blue)
 
 **一个HTTP API驱动的微信消息发送工具，支持MCP协议集成，专为AI助手和自动化任务设计**
 
@@ -50,10 +50,10 @@
 
 ## ✨ 功能特点
 
-- ✅ **MCP标准兼容** - 完全符合 MCP 标准规范，可与 Claude、ChatGPT 等 AI 助手集成
-- ✅ **HTTP API** - 提供 RESTful API 接口，支持消息发送和状态查询
-- ✅ **JSON-RPC 2.0** - MCP 服务器基于标准的 JSON-RPC 2.0 协议
-- ✅ **微信消息发送** - 支持发送文本和文件消息到微信联系人或群聊
+- ✅ **MCP标准兼容** - 基于官方 MCP Python SDK (FastMCP) 实现，完全符合 MCP 2024-11-05 规范
+- ✅ **双传输模式** - 支持 stdio 和 Streamable HTTP 两种 MCP 传输模式
+- ✅ **HTTP API** - 提供 RESTful API 接口，与 MCP 端点共享同一端口（Starlette 统一应用）
+- ✅ **微信消息发送** - 支持发送文本消息到微信联系人或群聊
 - ✅ **定时发送** - 支持延迟发送消息功能
 - ✅ **NT 框架支持** - 完全支持微信 4.0 以上的 NT 框架版本
 - ✅ **智能版本检测** - 自动检测微信版本并适配相应的操作方式
@@ -87,13 +87,12 @@
 WeChat-MCP-Server/
 ├── 📂 src/
 │   ├── 📄 __init__.py               # 包初始化
-│   ├── 📄 mcp_server.py             # MCP服务器主要实现
+│   ├── 📄 mcp_server.py             # MCP 服务器 + HTTP API（FastMCP + Starlette 统一应用）
 │   ├── 📄 wechat_controller.py      # 微信自动化控制器（主入口）
 │   ├── 📄 window_finder.py          # 窗口查找与版本检测 Mixin
 │   ├── 📄 tray_manager.py           # 系统托盘管理 Mixin
 │   ├── 📄 gui_operations.py         # GUI 操作（输入、搜索、发送）Mixin
 │   ├── 📄 config.py                 # 配置管理模块
-│   ├── 📄 http_server.py            # HTTP API 服务器
 │   └── 📂 anti_ban/                 # 防封号保护系统
 │       ├── 📄 __init__.py           # 防封号包初始化
 │       ├── 📄 enhanced_rate_limiter.py    # 增强版速率限制器
@@ -102,10 +101,13 @@ WeChat-MCP-Server/
 │       ├── 📄 content_diversifier.py      # 内容多样化器
 │       └── 📄 natural_gui.py        # 自然 GUI 操作
 ├── 📂 examples/
-│   └── 📄 mcp_client_example.py     # 客户端使用示例
+│   └── 📄 mcp_client_example.py     # MCP 客户端使用示例（支持 stdio / streamable-http）
 ├── 📂 docs/
 │   ├── 📄 QUICK_START.md            # 快速开始指南
 │   └── 📄 AVOID_BAN.md              # 防封号指南
+├── 📂 static/
+│   ├── 📄 index.html                # Web 首页
+│   └── 📄 test.html                 # 测试页面
 ├── 📂 支持我们/
 │   ├── 🖼️ 1.jpg                     # 支付宝收款码
 │   └── 🖼️ 2.jpg                     # 微信赞赏码
@@ -125,7 +127,7 @@ WeChat-MCP-Server/
 git clone https://github.com/1052666/WeChat-MCP-Server.git
 cd WeChat-MCP-Server
 
-# 安装依赖
+# 安装依赖（需要 Python 3.10+）
 pip install -r requirements.txt
 ```
 
@@ -224,19 +226,35 @@ pip install -r requirements.txt
 运行示例客户端进行测试：
 
 ```bash
+# stdio 模式（自动启动服务器子进程）
 cd examples
 python mcp_client_example.py
+
+# streamable-http 模式（需先启动服务器）
+python mcp_client_example.py --transport streamable-http --url http://localhost:8765/mcp
 ```
 
 ## 📡 HTTP API
 
-### 启动 HTTP 服务器
+### 启动服务器
+
+MCP 服务器和 HTTP API 运行在同一个 Starlette 应用中（统一端口）：
 
 ```bash
-python src/http_server.py
+# 启动 streamable-http 模式（MCP + HTTP API 统一服务器）
+python src/mcp_server.py --transport streamable-http
+
+# 指定端口和监听地址
+python src/mcp_server.py --transport streamable-http --port 8765 --host 0.0.0.0
+
+# stdio 模式（仅 MCP，无 HTTP API）
+python src/mcp_server.py
 ```
 
-服务器将在 `http://0.0.0.0:8080` 启动（端口可在 `config.json` 中配置）。
+streamable-http 模式下可用的端点：
+- **MCP 端点**: `http://localhost:8765/mcp` — Streamable HTTP MCP 协议
+- **HTTP API**: `http://localhost:8765/api/v1/...` — RESTful API
+- **Web 页面**: `http://localhost:8765/` — 首页 / `http://localhost:8765/test` — 测试页面
 
 ### 配置文件
 
@@ -371,41 +389,44 @@ GET /api/v1/anti-ban/config
 #### 💻 实现示例
 
 ```python
-# 示例：GitHub Actions完成后发送微信通知
+# 示例：通过 HTTP API 发送微信通知
 import requests
 
 def send_deployment_notification(status, details):
-    # 调用WeChat MCP Server API
+    """通过 HTTP API 发送部署通知到微信群"""
     payload = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "tools/call",
-        "params": {
-            "name": "send_wechat_message",
-            "arguments": {
-                "contact_name": "技术团队群",
-                "message": f"🚀 部署状态: {status}\n📋 详情: {details}"
-            }
-        }
+        "contact_name": "技术团队群",
+        "message": f"部署状态: {status}\n详情: {details}"
     }
     
-    response = requests.post("http://localhost:8080/mcp", json=payload)
+    response = requests.post(
+        "http://localhost:8765/api/v1/messages/send",
+        json=payload,
+    )
     return response.json()
 
-# 在CI/CD流程中调用
+# 在 CI/CD 流程中调用
 if __name__ == "__main__":
     send_deployment_notification("成功", "版本v2.1.0已部署到生产环境")
 ```
 
 ## 🔧 MCP协议实现
 
-本服务器实现了以下MCP标准方法：
+本服务器基于 [官方 MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) (FastMCP) 实现，支持以下传输模式：
 
-| 方法 | 描述 |
-|------|------|
-| `initialize` | 初始化服务器连接 |
-| `tools/list` | 列出可用工具 |
-| `tools/call` | 调用指定工具 |
+| 传输模式 | 命令 | 说明 |
+|---------|------|------|
+| `stdio` (默认) | `python src/mcp_server.py` | 通过标准输入/输出通信，适配 Claude Desktop 等 AI 助手 |
+| `streamable-http` | `python src/mcp_server.py --transport streamable-http` | HTTP 长连接，MCP + HTTP API 统一端口 |
+
+MCP 协议版本: **2024-11-05**
+
+SDK 自动处理的协议功能：
+- `initialize` / `notifications/initialized` 握手
+- `tools/list` / `tools/call` 工具调用
+- `ping` / `pong` 心跳
+- 会话管理 (`Mcp-Session-Id`)
+- JSON-RPC 2.0 消息序列化
 
 ### 📡 JSON-RPC 消息格式
 
@@ -449,10 +470,11 @@ if __name__ == "__main__":
 ## 🏗️ 技术架构
 
 ### 🖥️ MCP服务器 (mcp_server.py)
-- 实现JSON-RPC 2.0协议
-- 处理MCP标准方法调用
-- 管理工具注册和执行
-- 提供完整的错误处理
+- 基于官方 MCP Python SDK (FastMCP) 实现
+- 支持 stdio 和 Streamable HTTP 双传输模式
+- Streamable HTTP 模式下与 HTTP API 共享同一 Starlette 应用和端口
+- 使用 `@mcp.tool()` 装饰器注册工具
+- CORS 中间件暴露 `Mcp-Session-Id` 响应头
 
 ### 📱 微信控制器 (wechat_controller.py)
 
@@ -482,7 +504,7 @@ if __name__ == "__main__":
 ### 🖥️ 系统要求
 - **操作系统**: Windows 系统
 - **微信版本**: 微信 4.0 及以上 NT 框架版本（传统版本已不再支持）
-- **Python版本**: Python 3.8+
+- **Python版本**: Python 3.10+（MCP SDK 要求）
 
 ### 🔐 权限要求
 - 需要屏幕控制权限（pyautogui）
@@ -543,10 +565,9 @@ if __name__ == "__main__":
 
 ### ➕ 添加新工具
 
-1. 在 `mcp_server.py` 中的 `_register_tools()` 方法添加工具定义
-2. 实现对应的执行方法
-3. 如需新的微信操作，在对应的 Mixin 模块中实现底层功能（GUI 操作在 `gui_operations.py`，窗口查找在 `window_finder.py`）
-4. 更新配置文件和文档
+1. 在 `src/mcp_server.py` 中使用 `@mcp.tool()` 装饰器注册新工具函数
+2. 如需新的微信操作，在对应的 Mixin 模块中实现底层功能（GUI 操作在 `gui_operations.py`，窗口查找在 `window_finder.py`）
+3. 更新配置文件和文档
 
 ### 🌐 支持其他平台
 
