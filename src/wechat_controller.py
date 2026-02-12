@@ -199,14 +199,14 @@ class WeChatController:
                         # 如果窗口最小化，先恢复
                         if win_info['iconic']:
                             win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
-                            time.sleep(10.5)
+                            self._natural_gui._random_pause(0.8, 1.5)
                         # 如果窗口隐藏，显示它
                         if not win_info['visible']:
                             win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
-                            time.sleep(10.5)
+                            self._natural_gui._random_pause(0.8, 1.5)
                         # 激活窗口
                         win32gui.SetForegroundWindow(hwnd)
-                        time.sleep(10.3)
+                        self._natural_gui._random_pause(0.5, 1.0)
 
                         # 验证窗口现在是否可见
                         if win32gui.IsWindowVisible(hwnd):
@@ -224,12 +224,12 @@ class WeChatController:
                     try:
                         if win_info['iconic']:
                             win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
-                            time.sleep(0.5)
+                            self._natural_gui._random_pause(0.4, 0.7)
                         if not win_info['visible']:
                             win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
-                            time.sleep(0.5)
+                            self._natural_gui._random_pause(0.4, 0.7)
                         win32gui.SetForegroundWindow(hwnd)
-                        time.sleep(0.3)
+                        self._natural_gui._random_pause(0.2, 0.4)
 
                         if win32gui.IsWindowVisible(hwnd):
                             self.logger.info("✅ 成功恢复联系人列表窗口")
@@ -265,18 +265,18 @@ class WeChatController:
             if win32gui.IsIconic(hwnd):
                 self.logger.debug("窗口已最小化，正在恢复...")
                 win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
-                time.sleep(0.5)
+                self._natural_gui._random_pause(0.4, 0.7)
 
             # 3. 如果窗口不可见，显示它
             if not win32gui.IsWindowVisible(hwnd):
                 self.logger.debug("窗口不可见，正在显示...")
                 win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
-                time.sleep(0.5)
+                self._natural_gui._random_pause(0.4, 0.7)
 
             # 4. 尝试标准置顶
             try:
                 win32gui.SetForegroundWindow(hwnd)
-                time.sleep(0.2)
+                self._natural_gui._random_pause(0.15, 0.3)
             except Exception as e:
                 self.logger.debug(f"标准置顶失败: {e}")
 
@@ -314,12 +314,12 @@ class WeChatController:
                 self.logger.debug(f"AttachThreadInput 失败: {e}")
 
             # 7. 等待并验证置顶结果
-            time.sleep(0.3)
+            self._natural_gui._random_pause(0.2, 0.4)
             for _ in range(5):  # 最多重试 5 次
                 if win32gui.GetForegroundWindow() == hwnd:
                     self.logger.debug("✅ 窗口激活成功")
                     return True
-                time.sleep(0.1)
+                self._natural_gui._random_pause(0.08, 0.15)
                 try:
                     win32gui.SetForegroundWindow(hwnd)
                 except Exception:
@@ -410,7 +410,7 @@ class WeChatController:
             win32clipboard.CloseClipboard()
 
         # 验证剪贴板内容是否设置成功
-        time.sleep(0.1)
+        self._natural_gui._random_pause(0.08, 0.15)
         win32clipboard.OpenClipboard()
         try:
             verify = win32clipboard.GetClipboardData(win32clipboard.CF_UNICODETEXT)
@@ -422,18 +422,18 @@ class WeChatController:
             win32clipboard.CloseClipboard()
 
         # 等待剪贴板稳定
-        time.sleep(0.2)
+        self._natural_gui._random_pause(0.15, 0.25)
 
         # 执行粘贴操作 - 使用更可靠的方式
         self.logger.debug("执行粘贴操作 (Ctrl+V)...")
         pyautogui.keyDown('ctrl')
-        time.sleep(0.05)
+        self._natural_gui._random_pause(0.03, 0.08)
         pyautogui.press('v')
-        time.sleep(0.05)
+        self._natural_gui._random_pause(0.03, 0.08)
         pyautogui.keyUp('ctrl')
 
         # 等待粘贴完成
-        time.sleep(0.5)
+        self._natural_gui._random_pause(0.4, 0.7)
         self.logger.debug("粘贴操作完成")
         return original_data
 
