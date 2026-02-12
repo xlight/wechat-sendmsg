@@ -336,10 +336,12 @@
                         <div class="endpoint-details">
                             <h4>响应示例：</h4>
                             <pre>{
-  "status": "success",
-  "wechat_running": true,
-  "wechat_version": "4.0.0.x",
-  "is_nt_version": true
+  "ok": true,
+  "wechat_status": {
+    "wechat_available": true,
+    "wechat_version": "4.0.0.x",
+    "is_nt_framework": true
+  }
 }</pre>
                         </div>
                     </div>
@@ -358,9 +360,8 @@
 }</pre>
                             <h4>响应示例：</h4>
                             <pre>{
-  "status": "success",
-  "message": "消息已发送",
-  "delayed": false
+  "ok": true,
+  "message": "Message sent successfully"
 }</pre>
                         </div>
                     </div>
@@ -374,9 +375,16 @@
                         <div class="endpoint-details">
                             <h4>响应示例：</h4>
                             <pre>{
-  "total_messages": 42,
-  "delayed_messages": 5,
-  "current_queue_size": 0
+  "ok": true,
+  "rate_limiter": { ... },
+  "work_time": {
+    "is_work_time": true,
+    "work_hours": "8-22"
+  },
+  "runtime": {
+    "current_runtime_hours": 1.5,
+    "max_daily_hours": 10
+  }
 }</pre>
                         </div>
                     </div>
@@ -390,9 +398,14 @@
                         <div class="endpoint-details">
                             <h4>响应示例：</h4>
                             <pre>{
-  "enabled": true,
-  "max_messages_per_minute": 10,
-  "delay_range": [1, 3]
+  "ok": true,
+  "rate_limits": {
+    "per_minute": 5,
+    "per_hour": 50,
+    "per_day": 200
+  },
+  "human_behavior": { ... },
+  "work_time": { ... }
 }</pre>
                         </div>
                     </div>
@@ -405,34 +418,14 @@
                 <div class="endpoint-grid">
                     <div class="endpoint-card">
                         <div class="endpoint-header">
-                            <span class="method-badge method-get">GET</span>
-                            <span class="endpoint-path">/mcp/sse</span>
+                            <span class="method-badge method-post">POST</span>
+                            <span class="endpoint-path">/mcp</span>
                         </div>
-                        <div class="endpoint-description">MCP over HTTP (Server-Sent Events) - 接收服务器推送的 MCP 响应</div>
+                        <div class="endpoint-description">MCP Streamable HTTP 端点 — 基于官方 MCP SDK (FastMCP)，支持完整的 MCP 协议交互</div>
                         <div class="endpoint-details">
                             <h4>使用说明：</h4>
-                            <p>使用 EventSource API 连接此端点，服务器会推送 MCP 响应事件。</p>
-                            <h4>事件类型：</h4>
-                            <pre>- mcp-response: MCP 响应数据
-- mcp-error: MCP 错误信息
-- keepalive: 心跳保活事件（每30秒）</pre>
-                            <h4>JavaScript 示例：</h4>
-                            <pre>const eventSource = new EventSource('/mcp/sse');
-eventSource.addEventListener('mcp-response', (e) => {
-  const response = JSON.parse(e.data);
-  console.log(response);
-});</pre>
-                        </div>
-                    </div>
-
-                    <div class="endpoint-card">
-                        <div class="endpoint-header">
-                            <span class="method-badge method-post">POST</span>
-                            <span class="endpoint-path">/mcp/sse</span>
-                        </div>
-                        <div class="endpoint-description">MCP over HTTP (SSE) - 发送 MCP 请求到服务器</div>
-                        <div class="endpoint-details">
-                            <h4>请求体：</h4>
+                            <p>通过 POST 请求发送 JSON-RPC 格式的 MCP 消息。服务器返回带有 <code>Mcp-Session-Id</code> 头的响应，后续请求需携带该头以维持会话。</p>
+                            <h4>初始化请求示例：</h4>
                             <pre>{
   "jsonrpc": "2.0",
   "method": "initialize",
@@ -446,27 +439,49 @@ eventSource.addEventListener('mcp-response', (e) => {
   },
   "id": 1
 }</pre>
-                            <h4>响应：</h4>
-                            <pre>HTTP 202 Accepted
-响应会通过 GET /mcp/sse 推送</pre>
+                            <h4>工具调用示例：</h4>
+                            <pre>{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": {
+    "name": "send_wechat_message",
+    "arguments": {
+      "contact_name": "文件传输助手",
+      "message": "你好"
+    }
+  },
+  "id": 2
+}</pre>
+                            <h4>可用工具：</h4>
+                            <pre>- send_wechat_message: 向联系人发送文本消息
+- schedule_wechat_message: 延迟发送消息</pre>
                         </div>
                     </div>
 
                     <div class="endpoint-card">
                         <div class="endpoint-header">
-                            <span class="method-badge method-post">POST</span>
-                            <span class="endpoint-path">/mcp/stream</span>
+                            <span class="method-badge method-get">GET</span>
+                            <span class="endpoint-path">/mcp</span>
                         </div>
-                        <div class="endpoint-description">MCP over HTTP (NDJSON Streaming) - 发送并接收流式 MCP 消息</div>
+                        <div class="endpoint-description">MCP Streamable HTTP SSE 端点 — 用于接收服务器主动推送的通知（需携带 Mcp-Session-Id）</div>
                         <div class="endpoint-details">
                             <h4>使用说明：</h4>
-                            <p>发送 NDJSON 格式的 MCP 请求（每行一个 JSON 对象），服务器返回 NDJSON 格式的响应。</p>
-                            <h4>请求示例：</h4>
-                            <pre>{"jsonrpc":"2.0","method":"initialize","params":{...},"id":1}
-{"jsonrpc":"2.0","method":"tools/list","id":2}</pre>
-                            <h4>响应示例：</h4>
-                            <pre>{"jsonrpc":"2.0","result":{...},"id":1}
-{"jsonrpc":"2.0","result":{...},"id":2}</pre>
+                            <p>通过 GET 请求建立 SSE 连接，接收服务器端主动推送的通知和事件。请求头中需携带之前通过 POST 获取的 <code>Mcp-Session-Id</code>。</p>
+                            <h4>请求头：</h4>
+                            <pre>Accept: text/event-stream
+Mcp-Session-Id: &lt;从 POST /mcp 响应获取&gt;</pre>
+                        </div>
+                    </div>
+
+                    <div class="endpoint-card">
+                        <div class="endpoint-header">
+                            <span class="method-badge method-post">DELETE</span>
+                            <span class="endpoint-path">/mcp</span>
+                        </div>
+                        <div class="endpoint-description">关闭 MCP 会话 — 通知服务器释放会话资源</div>
+                        <div class="endpoint-details">
+                            <h4>请求头：</h4>
+                            <pre>Mcp-Session-Id: &lt;要关闭的会话 ID&gt;</pre>
                         </div>
                     </div>
                 </div>
@@ -485,7 +500,7 @@ eventSource.addEventListener('mcp-response', (e) => {
 
         <footer>
             <p>WeChat MCP Server - 基于 <a href="https://github.com/modelcontextprotocol/specification" target="_blank">Model Context Protocol</a></p>
-            <p>支持 HTTP API 和 MCP over HTTP (SSE + NDJSON Streaming)</p>
+            <p>支持 HTTP API 和 MCP Streamable HTTP (官方 FastMCP SDK)</p>
         </footer>
     </div>
 

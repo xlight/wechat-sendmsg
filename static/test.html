@@ -361,8 +361,7 @@
 
         <div class="tabs">
             <div class="tab active" onclick="switchTab('http-api')">HTTP API 测试</div>
-            <div class="tab" onclick="switchTab('mcp-sse')">MCP SSE 测试</div>
-            <div class="tab" onclick="switchTab('mcp-stream')">MCP Stream 测试</div>
+            <div class="tab" onclick="switchTab('mcp-test')">MCP Streamable HTTP 测试</div>
         </div>
 
         <!-- HTTP API 测试标签页 -->
@@ -422,79 +421,56 @@
             </div>
         </div>
 
-        <!-- MCP SSE 测试标签页 -->
-        <div id="mcp-sse" class="tab-content">
-            <h2>MCP SSE 测试</h2>
+        <!-- MCP Streamable HTTP 测试标签页 -->
+        <div id="mcp-test" class="tab-content">
+            <h2>MCP Streamable HTTP 测试</h2>
             
             <div class="alert alert-info">
-                <strong>提示：</strong> SSE (Server-Sent Events) 模式下，客户端通过 EventSource 连接服务器接收事件，通过 POST 发送请求。
+                <strong>提示：</strong> Streamable HTTP 模式通过 POST /mcp 发送 JSON-RPC 请求，服务器返回带有 <code>Mcp-Session-Id</code> 头的响应。后续请求需携带该头以维持会话。
             </div>
 
             <div class="form-group">
-                <label>连接状态 <span id="sseStatusBadge" class="status-badge status-error">未连接</span></label>
+                <label>会话状态 <span id="mcpSessionBadge" class="status-badge status-error">无会话</span></label>
                 <div>
-                    <button class="btn btn-success" onclick="connectSSE()" id="sseConnectBtn">连接 SSE</button>
-                    <button class="btn btn-danger" onclick="disconnectSSE()" id="sseDisconnectBtn" disabled>断开连接</button>
-                    <button class="btn btn-secondary btn-small" onclick="clearSSELog()">清空日志</button>
+                    <button class="btn btn-success" onclick="mcpInitialize()" id="mcpInitBtn">初始化会话</button>
+                    <button class="btn btn-danger" onclick="mcpCloseSession()" id="mcpCloseBtn" disabled>关闭会话</button>
+                    <button class="btn btn-secondary btn-small" onclick="clearMcpLog()">清空日志</button>
                 </div>
             </div>
 
             <div class="form-group">
                 <label>MCP 方法</label>
-                <select id="sseMethod" onchange="changeSseMethod()">
-                    <option value="initialize">initialize</option>
+                <select id="mcpMethod" onchange="changeMcpMethod()">
                     <option value="tools/list">tools/list</option>
-                    <option value="tools/call">tools/call (send_message)</option>
+                    <option value="tools/call">tools/call (send_wechat_message)</option>
+                    <option value="ping">ping</option>
+                    <option value="custom">自定义请求</option>
                 </select>
             </div>
 
             <!-- 动态参数表单 -->
-            <div id="sseParamsForm"></div>
+            <div id="mcpParamsForm"></div>
 
-            <div>
-                <button class="btn" onclick="sendSSERequest()" id="sseSendBtn" disabled>发送请求</button>
-            </div>
-
-            <div class="response-section">
-                <h3>SSE 事件日志</h3>
-                <div class="event-log" id="sseEventLog">
-                    <div class="event-item">
-                        <span class="event-time">[等待连接]</span>
-                        <span class="event-type">INFO</span>
-                        <span class="event-data">点击"连接 SSE"开始接收事件</span>
-                    </div>
+            <!-- 自定义请求输入 -->
+            <div id="mcpCustomForm" style="display: none;">
+                <div class="form-group">
+                    <label>自定义 JSON-RPC 请求体</label>
+                    <textarea id="mcpCustomRequest" rows="8" placeholder='{"jsonrpc":"2.0","method":"tools/list","id":1}'></textarea>
                 </div>
             </div>
-        </div>
-
-        <!-- MCP Stream 测试标签页 -->
-        <div id="mcp-stream" class="tab-content">
-            <h2>MCP Stream 测试</h2>
-            
-            <div class="alert alert-info">
-                <strong>提示：</strong> Stream 模式使用 NDJSON 格式 (每行一个 JSON 对象)，支持批量请求。
-            </div>
-
-            <div class="form-group">
-                <label>NDJSON 请求（每行一个 JSON-RPC 请求）</label>
-                <textarea id="streamRequest" rows="10" placeholder='例如：
-{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"web-client","version":"1.0.0"}},"id":1}
-{"jsonrpc":"2.0","method":"tools/list","id":2}'></textarea>
-            </div>
 
             <div>
-                <button class="btn" onclick="sendStreamRequest()" id="streamSendBtn">发送请求</button>
-                <button class="btn btn-secondary" onclick="clearStreamForm()">清空</button>
-                <button class="btn btn-secondary btn-small" onclick="loadTemplate('initialize')">Initialize 模板</button>
-                <button class="btn btn-secondary btn-small" onclick="loadTemplate('tools_list')">Tools/List 模板</button>
-                <button class="btn btn-secondary btn-small" onclick="loadTemplate('full')">完整流程模板</button>
-                <button class="btn btn-secondary btn-small" onclick="copyToClipboard('streamResponse')">复制响应</button>
+                <button class="btn" onclick="sendMcpRequest()" id="mcpSendBtn" disabled>发送请求</button>
             </div>
 
             <div class="response-section">
-                <h3>NDJSON 响应</h3>
-                <div class="response-box">
-                    <pre id="streamResponse">等待响应...</pre>
+                <h3>MCP 交互日志</h3>
+                <div class="event-log" id="mcpEventLog">
+                    <div class="event-item">
+                        <span class="event-time">[等待]</span>
+                        <span class="event-type">INFO</span>
+                        <span class="event-data">点击"初始化会话"开始 MCP 交互</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -502,12 +478,11 @@
 
     <script>
         // 全局变量
-        let eventSource = null;
-        let sseRequestId = 1;
+        let mcpSessionId = null;
+        let mcpRequestId = 1;
 
         // 标签页切换
         function switchTab(tabId) {
-            // 隐藏所有标签内容
             document.querySelectorAll('.tab-content').forEach(content => {
                 content.classList.remove('active');
             });
@@ -515,7 +490,6 @@
                 tab.classList.remove('active');
             });
 
-            // 显示选中的标签
             document.getElementById(tabId).classList.add('active');
             event.target.classList.add('active');
         }
@@ -542,7 +516,6 @@
             let method = 'GET';
             let body = null;
 
-            // 根据选择的功能设置请求参数
             switch (func) {
                 case 'send_message':
                     url = '/api/v1/messages/send';
@@ -567,11 +540,9 @@
                     break;
             }
 
-            // 更新请求详情显示
-            document.getElementById('httpRequestInfo').textContent = `${method} ${url}`;
+            document.getElementById('httpRequestInfo').textContent = method + ' ' + url;
             document.getElementById('httpRequestBody').textContent = body ? JSON.stringify(body, null, 2) : '-';
 
-            // 显示加载状态
             const btn = document.getElementById('httpApiBtn');
             btn.disabled = true;
             btn.innerHTML = '发送中... <span class="loading-spinner"></span>';
@@ -579,9 +550,7 @@
             try {
                 const options = {
                     method: method,
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
+                    headers: { 'Content-Type': 'application/json' }
                 };
 
                 if (body) {
@@ -591,13 +560,11 @@
                 const response = await fetch(url, options);
                 const data = await response.json();
 
-                // 更新响应显示
                 const statusClass = response.ok ? 'status-success' : 'status-error';
-                document.getElementById('httpStatusBadge').innerHTML = `<span class="${statusClass}">${response.status} ${response.statusText}</span>`;
-                document.getElementById('httpResponseStatus').textContent = `${response.status} ${response.statusText}`;
+                document.getElementById('httpStatusBadge').innerHTML = '<span class="' + statusClass + '">' + response.status + ' ' + response.statusText + '</span>';
+                document.getElementById('httpResponseStatus').textContent = response.status + ' ' + response.statusText;
                 document.getElementById('httpResponseBody').textContent = JSON.stringify(data, null, 2);
 
-                // 保存到 localStorage
                 if (func === 'send_message') {
                     localStorage.setItem('contactName', body.contact_name);
                     localStorage.setItem('messageContent', body.message);
@@ -605,7 +572,7 @@
             } catch (error) {
                 document.getElementById('httpStatusBadge').innerHTML = '<span class="status-error">错误</span>';
                 document.getElementById('httpResponseStatus').textContent = '请求失败';
-                document.getElementById('httpResponseBody').textContent = `错误: ${error.message}`;
+                document.getElementById('httpResponseBody').textContent = '错误: ' + error.message;
             } finally {
                 btn.disabled = false;
                 btn.textContent = func === 'send_message' ? '发送消息' : '发送请求';
@@ -617,232 +584,245 @@
             document.getElementById('messageContent').value = '';
         }
 
-        // ========== MCP SSE 测试功能 ==========
+        // ========== MCP Streamable HTTP 测试功能 ==========
 
-        function connectSSE() {
-            if (eventSource) {
-                addSSELog('WARN', '已经连接到 SSE');
-                return;
-            }
+        async function mcpInitialize() {
+            addMcpLog('INFO', '正在初始化 MCP 会话...');
 
-            addSSELog('INFO', '正在连接到 /mcp/sse...');
-            
-            eventSource = new EventSource('/mcp/sse');
-
-            eventSource.onopen = function() {
-                addSSELog('SUCCESS', 'SSE 连接已建立');
-                document.getElementById('sseStatusBadge').className = 'status-badge status-success';
-                document.getElementById('sseStatusBadge').textContent = '已连接';
-                document.getElementById('sseConnectBtn').disabled = true;
-                document.getElementById('sseDisconnectBtn').disabled = false;
-                document.getElementById('sseSendBtn').disabled = false;
-            };
-
-            eventSource.addEventListener('mcp-response', function(e) {
-                const data = JSON.parse(e.data);
-                addSSELog('RESPONSE', JSON.stringify(data, null, 2));
-            });
-
-            eventSource.addEventListener('mcp-error', function(e) {
-                const data = JSON.parse(e.data);
-                addSSELog('ERROR', JSON.stringify(data, null, 2));
-            });
-
-            eventSource.addEventListener('keepalive', function(e) {
-                addSSELog('KEEPALIVE', 'Heartbeat received');
-            });
-
-            eventSource.onerror = function(e) {
-                addSSELog('ERROR', 'SSE 连接错误或已断开');
-                disconnectSSE();
-            };
-        }
-
-        function disconnectSSE() {
-            if (eventSource) {
-                eventSource.close();
-                eventSource = null;
-                addSSELog('INFO', 'SSE 连接已断开');
-            }
-            
-            document.getElementById('sseStatusBadge').className = 'status-badge status-error';
-            document.getElementById('sseStatusBadge').textContent = '未连接';
-            document.getElementById('sseConnectBtn').disabled = false;
-            document.getElementById('sseDisconnectBtn').disabled = true;
-            document.getElementById('sseSendBtn').disabled = true;
-        }
-
-        function changeSseMethod() {
-            const method = document.getElementById('sseMethod').value;
-            const paramsForm = document.getElementById('sseParamsForm');
-
-            if (method === 'tools/call') {
-                paramsForm.innerHTML = `
-                    <div class="form-group">
-                        <label>联系人名称</label>
-                        <input type="text" id="sseContactName" value="文件传输助手">
-                    </div>
-                    <div class="form-group">
-                        <label>消息内容</label>
-                        <textarea id="sseMessageContent" rows="3"></textarea>
-                    </div>
-                `;
-            } else {
-                paramsForm.innerHTML = '';
-            }
-        }
-
-        async function sendSSERequest() {
-            const method = document.getElementById('sseMethod').value;
-            let request = {
+            const request = {
                 jsonrpc: "2.0",
-                method: method,
-                id: sseRequestId++
-            };
-
-            // 根据方法设置参数
-            if (method === 'initialize') {
-                request.params = {
+                method: "initialize",
+                params: {
                     protocolVersion: "2024-11-05",
                     capabilities: {},
                     clientInfo: {
-                        name: "web-client",
+                        name: "web-test-client",
                         version: "1.0.0"
                     }
-                };
-            } else if (method === 'tools/call') {
-                const contactName = document.getElementById('sseContactName').value;
-                const message = document.getElementById('sseMessageContent').value;
-                
-                if (!contactName || !message) {
-                    alert('请填写联系人名称和消息内容');
-                    return;
-                }
+                },
+                id: mcpRequestId++
+            };
 
-                request.params = {
-                    name: "send_message",
-                    arguments: {
-                        contact_name: contactName,
-                        message: message
-                    }
-                };
-            }
-
-            addSSELog('REQUEST', JSON.stringify(request, null, 2));
+            addMcpLog('REQUEST', JSON.stringify(request, null, 2));
 
             try {
-                const response = await fetch('/mcp/sse', {
+                const response = await fetch('/mcp', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json, text/event-stream'
                     },
                     body: JSON.stringify(request)
                 });
 
-                if (response.status === 202) {
-                    addSSELog('INFO', '请求已发送，等待 SSE 响应...');
-                } else {
-                    addSSELog('ERROR', `请求失败: ${response.status} ${response.statusText}`);
+                // 获取 Mcp-Session-Id
+                const sessionId = response.headers.get('Mcp-Session-Id');
+                if (sessionId) {
+                    mcpSessionId = sessionId;
+                    addMcpLog('SUCCESS', '获取到会话 ID: ' + sessionId);
+                    document.getElementById('mcpSessionBadge').className = 'status-badge status-success';
+                    document.getElementById('mcpSessionBadge').textContent = '已连接';
+                    document.getElementById('mcpInitBtn').disabled = true;
+                    document.getElementById('mcpCloseBtn').disabled = false;
+                    document.getElementById('mcpSendBtn').disabled = false;
                 }
+
+                const data = await response.text();
+                try {
+                    const json = JSON.parse(data);
+                    addMcpLog('RESPONSE', JSON.stringify(json, null, 2));
+                } catch {
+                    addMcpLog('RESPONSE', data);
+                }
+
+                // 发送 initialized 通知
+                const notification = {
+                    jsonrpc: "2.0",
+                    method: "notifications/initialized"
+                };
+                const headers = { 'Content-Type': 'application/json' };
+                if (mcpSessionId) {
+                    headers['Mcp-Session-Id'] = mcpSessionId;
+                }
+                await fetch('/mcp', {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify(notification)
+                });
+                addMcpLog('INFO', '已发送 initialized 通知');
+
             } catch (error) {
-                addSSELog('ERROR', `请求错误: ${error.message}`);
+                addMcpLog('ERROR', '初始化失败: ' + error.message);
             }
         }
 
-        function addSSELog(type, message) {
-            const log = document.getElementById('sseEventLog');
+        async function mcpCloseSession() {
+            if (!mcpSessionId) return;
+
+            addMcpLog('INFO', '正在关闭会话...');
+
+            try {
+                await fetch('/mcp', {
+                    method: 'DELETE',
+                    headers: {
+                        'Mcp-Session-Id': mcpSessionId
+                    }
+                });
+                addMcpLog('SUCCESS', '会话已关闭');
+            } catch (error) {
+                addMcpLog('ERROR', '关闭会话失败: ' + error.message);
+            }
+
+            mcpSessionId = null;
+            mcpRequestId = 1;
+            document.getElementById('mcpSessionBadge').className = 'status-badge status-error';
+            document.getElementById('mcpSessionBadge').textContent = '无会话';
+            document.getElementById('mcpInitBtn').disabled = false;
+            document.getElementById('mcpCloseBtn').disabled = true;
+            document.getElementById('mcpSendBtn').disabled = true;
+        }
+
+        function changeMcpMethod() {
+            const method = document.getElementById('mcpMethod').value;
+            const paramsForm = document.getElementById('mcpParamsForm');
+            const customForm = document.getElementById('mcpCustomForm');
+
+            customForm.style.display = 'none';
+            paramsForm.innerHTML = '';
+
+            if (method === 'tools/call') {
+                paramsForm.innerHTML = '<div class="form-group">' +
+                    '<label>联系人名称</label>' +
+                    '<input type="text" id="mcpContactName" value="文件传输助手">' +
+                    '</div>' +
+                    '<div class="form-group">' +
+                    '<label>消息内容</label>' +
+                    '<textarea id="mcpMessageContent" rows="3"></textarea>' +
+                    '</div>';
+            } else if (method === 'custom') {
+                customForm.style.display = 'block';
+            }
+        }
+
+        async function sendMcpRequest() {
+            const method = document.getElementById('mcpMethod').value;
+            let request;
+
+            if (method === 'custom') {
+                const customText = document.getElementById('mcpCustomRequest').value.trim();
+                if (!customText) {
+                    alert('请输入自定义请求');
+                    return;
+                }
+                try {
+                    request = JSON.parse(customText);
+                } catch (e) {
+                    alert('JSON 格式错误: ' + e.message);
+                    return;
+                }
+            } else {
+                request = {
+                    jsonrpc: "2.0",
+                    method: method,
+                    id: mcpRequestId++
+                };
+
+                if (method === 'tools/call') {
+                    const contactName = document.getElementById('mcpContactName').value;
+                    const message = document.getElementById('mcpMessageContent').value;
+                    if (!contactName || !message) {
+                        alert('请填写联系人名称和消息内容');
+                        return;
+                    }
+                    request.params = {
+                        name: "send_wechat_message",
+                        arguments: {
+                            contact_name: contactName,
+                            message: message
+                        }
+                    };
+                } else if (method === 'tools/list') {
+                    // tools/list 不需要额外参数
+                } else if (method === 'ping') {
+                    // ping 不需要额外参数
+                }
+            }
+
+            addMcpLog('REQUEST', JSON.stringify(request, null, 2));
+
+            const headers = {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json, text/event-stream'
+            };
+            if (mcpSessionId) {
+                headers['Mcp-Session-Id'] = mcpSessionId;
+            }
+
+            try {
+                const response = await fetch('/mcp', {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify(request)
+                });
+
+                const contentType = response.headers.get('Content-Type') || '';
+
+                if (contentType.includes('text/event-stream')) {
+                    // SSE 响应，逐行读取
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let buffer = '';
+
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        buffer += decoder.decode(value, { stream: true });
+
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop() || '';
+
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                const data = line.substring(6);
+                                try {
+                                    const json = JSON.parse(data);
+                                    addMcpLog('RESPONSE', JSON.stringify(json, null, 2));
+                                } catch {
+                                    addMcpLog('RESPONSE', data);
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // JSON 响应
+                    const data = await response.text();
+                    try {
+                        const json = JSON.parse(data);
+                        addMcpLog('RESPONSE', JSON.stringify(json, null, 2));
+                    } catch {
+                        addMcpLog('RESPONSE', data || '(空响应, HTTP ' + response.status + ')');
+                    }
+                }
+            } catch (error) {
+                addMcpLog('ERROR', '请求错误: ' + error.message);
+            }
+        }
+
+        function addMcpLog(type, message) {
+            const log = document.getElementById('mcpEventLog');
             const time = new Date().toLocaleTimeString();
             const item = document.createElement('div');
             item.className = 'event-item';
-            item.innerHTML = `
-                <span class="event-time">[${time}]</span>
-                <span class="event-type">${type}</span>
-                <span class="event-data">${message}</span>
-            `;
+            item.innerHTML = '<span class="event-time">[' + time + ']</span>' +
+                '<span class="event-type">' + type + '</span>' +
+                '<pre class="event-data" style="display:inline;background:transparent;padding:0;margin:0;color:#ce9178;border:none;">' +
+                message.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre>';
             log.appendChild(item);
             log.scrollTop = log.scrollHeight;
         }
 
-        function clearSSELog() {
-            document.getElementById('sseEventLog').innerHTML = '';
-        }
-
-        // ========== MCP Stream 测试功能 ==========
-
-        async function sendStreamRequest() {
-            const requestText = document.getElementById('streamRequest').value.trim();
-            
-            if (!requestText) {
-                alert('请输入 NDJSON 请求');
-                return;
-            }
-
-            // 验证 NDJSON 格式
-            const lines = requestText.split('\n').filter(line => line.trim());
-            for (const line of lines) {
-                try {
-                    JSON.parse(line);
-                } catch (e) {
-                    alert(`JSON 格式错误: ${e.message}\n行内容: ${line}`);
-                    return;
-                }
-            }
-
-            const btn = document.getElementById('streamSendBtn');
-            btn.disabled = true;
-            btn.innerHTML = '发送中... <span class="loading-spinner"></span>';
-
-            document.getElementById('streamResponse').textContent = '等待响应...';
-
-            try {
-                const response = await fetch('/mcp/stream', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-ndjson'
-                    },
-                    body: requestText
-                });
-
-                const responseText = await response.text();
-                
-                // 格式化 NDJSON 响应
-                const responseLines = responseText.split('\n').filter(line => line.trim());
-                const formatted = responseLines.map(line => {
-                    try {
-                        return JSON.stringify(JSON.parse(line), null, 2);
-                    } catch {
-                        return line;
-                    }
-                }).join('\n\n');
-
-                document.getElementById('streamResponse').textContent = formatted || '(空响应)';
-            } catch (error) {
-                document.getElementById('streamResponse').textContent = `错误: ${error.message}`;
-            } finally {
-                btn.disabled = false;
-                btn.textContent = '发送请求';
-            }
-        }
-
-        function clearStreamForm() {
-            document.getElementById('streamRequest').value = '';
-            document.getElementById('streamResponse').textContent = '等待响应...';
-        }
-
-        function loadTemplate(type) {
-            let template = '';
-            
-            if (type === 'initialize') {
-                template = '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"web-client","version":"1.0.0"}},"id":1}';
-            } else if (type === 'tools_list') {
-                template = '{"jsonrpc":"2.0","method":"tools/list","id":1}';
-            } else if (type === 'full') {
-                template = `{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"web-client","version":"1.0.0"}},"id":1}
-{"jsonrpc":"2.0","method":"tools/list","id":2}
-{"jsonrpc":"2.0","method":"tools/call","params":{"name":"send_message","arguments":{"contact_name":"文件传输助手","message":"测试消息"}},"id":3}`;
-            }
-            
-            document.getElementById('streamRequest').value = template;
+        function clearMcpLog() {
+            document.getElementById('mcpEventLog').innerHTML = '';
         }
 
         // ========== 通用工具函数 ==========
@@ -851,9 +831,9 @@
             const element = document.getElementById(elementId);
             const text = element.textContent;
             
-            navigator.clipboard.writeText(text).then(() => {
+            navigator.clipboard.writeText(text).then(function() {
                 alert('已复制到剪贴板');
-            }).catch(err => {
+            }).catch(function(err) {
                 alert('复制失败: ' + err);
             });
         }
@@ -861,7 +841,6 @@
         // ========== 页面加载初始化 ==========
 
         window.addEventListener('DOMContentLoaded', function() {
-            // 从 localStorage 恢复输入
             const savedContactName = localStorage.getItem('contactName');
             const savedMessageContent = localStorage.getItem('messageContent');
             
@@ -872,14 +851,14 @@
                 document.getElementById('messageContent').value = savedMessageContent;
             }
 
-            // 初始化 SSE 方法表单
-            changeSseMethod();
+            changeMcpMethod();
         });
 
-        // 页面卸载时断开 SSE
+        // 页面卸载时关闭 MCP 会话
         window.addEventListener('beforeunload', function() {
-            if (eventSource) {
-                eventSource.close();
+            if (mcpSessionId) {
+                // 使用 sendBeacon 确保关闭请求发出
+                navigator.sendBeacon('/mcp', '');
             }
         });
     </script>
