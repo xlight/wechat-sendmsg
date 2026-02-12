@@ -5,6 +5,8 @@
 - [环境准备](#环境准备)
 - [MCP 服务器部署（stdio 模式）](#mcp-服务器部署stdio-模式)
 - [统一服务器部署（streamable-http 模式）](#统一服务器部署streamable-http-模式)
+- [系统托盘模式部署](#系统托盘模式部署)
+- [编译构建（独立 exe）](#编译构建独立-exe)
 
 ---
 
@@ -217,6 +219,68 @@ python src/mcp_server.py --transport streamable-http --host 127.0.0.1
 | `/test` | GET | 测试页面 |
 | `/queue` | GET | 队列管理页面 |
 | `/static/*` | GET | 静态文件 |
+
+---
+
+## 系统托盘模式部署
+
+系统托盘模式将服务器作为后台应用运行，通过系统托盘图标进行管理，适合长期运行场景。
+
+### 启动托盘模式
+
+```bash
+python src/mcp_server.py --transport streamable-http --systray
+```
+
+启动后：
+- 系统托盘区域会出现微信 MCP 服务器图标
+- HTTP API 和 MCP 端点在后台正常运行
+- 右键点击托盘图标可查看状态、打开管理页面或退出
+
+### 托盘菜单功能
+
+| 菜单项 | 说明 |
+|--------|------|
+| 微信 MCP 服务器 - 运行中 | 状态信息（灰色，不可点击） |
+| 端口: 8765 | 当前监听端口（灰色，不可点击） |
+| 打开管理页面 | 在浏览器中打开 Web 管理界面 |
+| 退出 | 优雅关闭服务器并退出程序 |
+
+---
+
+## 编译构建（独立 exe）
+
+通过 Nuitka 将项目编译为独立的 `.exe` 可执行文件，无需 Python 环境即可运行。
+
+### 步骤1: 安装编译工具
+
+```bash
+# 安装 Nuitka
+pip install nuitka
+
+# 确保有 C 编译器（推荐 MSVC，安装 Visual Studio Build Tools）
+```
+
+### 步骤2: 执行编译
+
+```bash
+# 编译为单文件 exe（默认）
+python build.py
+
+# 或编译为目录模式（速度快，适合调试）
+python build.py --standalone
+```
+
+编译完成后，输出文件位于 `dist/` 目录。
+
+### 步骤3: 运行编译版本
+
+```bash
+# 直接双击 exe 或命令行启动
+dist/wechat-mcp-server.exe
+```
+
+编译后的 exe 会自动以系统托盘模式运行，使用 streamable-http 传输模式。配置文件和数据库存放在 exe 同级的 `data/` 目录中。
 
 ---
 

@@ -26,6 +26,8 @@
   - 系统托盘管理 Mixin (src/tray_manager.py)
   - GUI 操作 Mixin (src/gui_operations.py)
 - 配置管理 (src/config.py)
+- 路径工具 (src/paths.py) — 兼容源码模式和 Nuitka 编译模式
+- 系统托盘应用 (src/systray_app.py) — pystray 托盘图标 + 后台 uvicorn
 - 防封号保护系统 (src/anti_ban/)
 
 ## 项目结构
@@ -41,6 +43,8 @@ chatwe-automate/
 │   ├── gui_operations.py         # GUIOperationsMixin: 输入框定位、剪贴板输入、搜索联系人、发送
 │   ├── config.py                 # 配置管理模块
 │   ├── message_queue.py          # MessageQueue + QueueWorker: SQLite 持久化消息队列与后台消费 Worker
+│   ├── paths.py                  # 路径工具模块（兼容源码/编译模式）
+│   ├── systray_app.py            # 系统托盘应用模块（pystray + 后台 uvicorn）
 │   └── anti_ban/                 # 防封号保护系统
 ├── examples/
 │   └── mcp_client_example.py     # MCP 客户端示例（支持 stdio / streamable-http）
@@ -54,6 +58,8 @@ chatwe-automate/
 │   ├── index.html                # Web 首页
 │   ├── test.html                 # 测试页面
 │   └── queue.html                # 队列管理页面
+├── assets/
+│   └── icon.ico                  # 应用图标（托盘图标 + 编译 exe 图标）
 ├── openspec/                     # OpenSpec 规范目录
 │   ├── specs/                    # 主规范
 │   └── changes/                  # 变更记录
@@ -63,6 +69,7 @@ chatwe-automate/
 │   ├── config.moderate.json          # 中等模式配置模板
 │   ├── config.aggressive.json        # 激进模式配置模板
 │   └── messages.db                   # 消息队列数据库（运行时自动生成）
+├── build.py                      # Nuitka 编译构建脚本
 ├── test_server.py                # MCP 服务器测试脚本
 ├── test_send_chinese.py          # 中文发送测试
 ├── requirements.txt              # Python 依赖
@@ -109,6 +116,20 @@ python src/mcp_server.py
 **启动统一服务器 (streamable-http 模式，MCP + HTTP API):**
 ```bash
 python src/mcp_server.py --transport streamable-http --port 8765
+```
+
+**启动系统托盘模式（后台运行，托盘图标管理）:**
+```bash
+python src/mcp_server.py --transport streamable-http --systray
+```
+
+**编译构建（Nuitka 编译为独立 exe）:**
+```bash
+# 单文件 exe（默认 onefile 模式）
+python build.py
+
+# 目录模式（调试用）
+python build.py --standalone
 ```
 
 **手动测试客户端:**

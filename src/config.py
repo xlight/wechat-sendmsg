@@ -9,6 +9,8 @@ import logging
 import os
 from typing import Any, Dict, List, Optional
 
+from paths import get_config_path, get_db_path
+
 logger = logging.getLogger(__name__)
 
 # 默认配置值
@@ -41,13 +43,13 @@ DEFAULTS: Dict[str, Any] = {
     "gui_pause_min": 0.05,
     "gui_pause_max": 0.15,
     # 消息队列配置
-    "queue_db_path": "data/messages.db",
+    "queue_db_path": "",  # 空字符串表示使用 paths 模块计算的默认路径
     "queue_max_retries": 3,
     "queue_poll_interval": 1.0,
 }
 
-# 配置文件默认路径（项目根目录下的 data/ 子目录）
-_CONFIG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "config.json")
+# 配置文件默认路径（通过 paths 模块计算）
+_CONFIG_FILE = get_config_path()
 
 
 class Config:
@@ -149,7 +151,10 @@ class Config:
     @property
     def queue_db_path(self) -> str:
         """消息队列 SQLite 数据库文件路径。"""
-        return str(self._data.get("queue_db_path", DEFAULTS["queue_db_path"]))
+        path = str(self._data.get("queue_db_path", ""))
+        if not path:
+            return get_db_path()
+        return path
 
     @property
     def queue_max_retries(self) -> int:

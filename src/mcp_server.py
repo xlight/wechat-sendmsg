@@ -28,6 +28,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config import Config
 from message_queue import MessageQueue, QueueWorker
+from paths import get_base_dir, get_static_dir
 from wechat_controller import WeChatController
 
 # ── 日志配置 ──
@@ -534,8 +535,7 @@ async def handle_anti_ban_config(request: Request) -> JSONResponse:
 
 async def handle_index(request: Request) -> FileResponse:
     """根路径返回 index.html — GET /"""
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    index_path = os.path.join(base_dir, "static", "index.html")
+    index_path = os.path.join(get_static_dir(), "index.html")
     if os.path.isfile(index_path):
         return FileResponse(index_path, media_type="text/html")
     return JSONResponse({"error": "index.html not found"}, status_code=404)
@@ -543,8 +543,7 @@ async def handle_index(request: Request) -> FileResponse:
 
 async def handle_test_page(request: Request) -> FileResponse:
     """测试页面 — GET /test"""
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    test_path = os.path.join(base_dir, "static", "test.html")
+    test_path = os.path.join(get_static_dir(), "test.html")
     if os.path.isfile(test_path):
         return FileResponse(test_path, media_type="text/html")
     return JSONResponse({"error": "test.html not found"}, status_code=404)
@@ -552,8 +551,7 @@ async def handle_test_page(request: Request) -> FileResponse:
 
 async def handle_queue_page(request: Request) -> FileResponse:
     """队列管理页面 — GET /queue"""
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    queue_path = os.path.join(base_dir, "static", "queue.html")
+    queue_path = os.path.join(get_static_dir(), "queue.html")
     if os.path.isfile(queue_path):
         return FileResponse(queue_path, media_type="text/html")
     return JSONResponse({"error": "queue.html not found"}, status_code=404)
@@ -583,8 +581,7 @@ def create_starlette_app() -> Starlette:
     mcp_endpoint = mcp_app.routes[0].endpoint
 
     # 项目根目录下的 static 文件夹
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    static_dir = os.path.join(base_dir, "static")
+    static_dir = get_static_dir()
 
     # 构建路由
     routes = [
@@ -682,13 +679,23 @@ def create_starlette_app() -> Starlette:
 
 
 def main():
-    """主入口点：解析命令行参数，选择传输模式启动服务器。"""
+    """主入口点：解析命令行参数，选择传输模式启动服务器。
+
+    运行模式：
+    - python src/mcp_server.py                                    → stdio 模式
+    - python src/mcp_server.py --transport streamable-http        → 控制台 HTTP 模式
+    - python src/mcp_server.py --transport streamable-http --systray → 托盘 + HTTP 模式
+    - 编译后的 .exe（无参数）                                      → 托盘 + HTTP 模式
+    """
+    # 检测编译模式
+    compiled = "__compiled__" in dir()
+
     parser = argparse.ArgumentParser(description="微信 MCP 服务器")
     parser.add_argument(
         "--transport",
         choices=["stdio", "streamable-http"],
-        default="stdio",
-        help="传输模式 (默认: stdio)",
+        default="streamable-http" if compiled else "stdio",
+        help="传输模式 (默认: 编译模式为 streamable-http，源码模式为 stdio)",
     )
     parser.add_argument(
         "--port",
@@ -701,16 +708,24 @@ def main():
         default="0.0.0.0",
         help="HTTP 服务器监听地址 (默认: 0.0.0.0)",
     )
+    parser.add_argument(
+        "--systray",
+        action="store_true",
+        default=compiled,  # 编译模式下默认启用系统托盘
+        help="以系统托盘模式运行 (默认: 编译模式自动启用)",
+    )
 
     args = parser.parse_args()
 
     if args.transport == "stdio":
         # stdio 模式：仅 MCP 功能，通过标准输入/输出通信
+        # stdio 模式不支持托盘，忽略 --systray 参数
+        if args.systray and not compiled:
+            logger.warning("stdio 模式不支持系统托盘，忽略 --systray 参数")
         logger.info("以 stdio 传输模式启动 MCP 服务器")
         mcp.run(transport="stdio")
 
     elif args.transport == "streamable-http":
-        # HTTP 模式：统一 Starlette 应用（MCP + HTTP API）
         import uvicorn
 
         port = args.port or config.http_port
@@ -725,7 +740,17 @@ def main():
         logger.info(f"  队列管理: http://{host}:{port}/queue")
 
         app = create_starlette_app()
-        uvicorn.run(app, host=host, port=port, log_level="info")
+
+        if args.systray:
+            # 系统托盘模式：后台线程运行 uvicorn，主线程运行托盘图标
+            from systray_app import SystrayApp
+
+            logger.info("以系统托盘模式启动...")
+            systray = SystrayApp(app=app, host=host, port=port)
+            systray.run()
+        else:
+            # 控制台模式：uvicorn 直接阻塞主线程
+            uvicorn.run(app, host=host, port=port, log_level="info")
 
 
 if __name__ == "__main__":

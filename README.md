@@ -67,6 +67,8 @@
 - ✅ **多种发送方式** - 支持Enter、Ctrl+Enter、Alt+S等多种发送快捷键
 - ✅ **异步处理** - 异步处理，不阻塞 AI 助手或调用方
 - ✅ **完整日志** - 完整的错误处理和日志记录
+- ✅ **系统托盘模式** - 支持以系统托盘应用运行，后台启动 HTTP 服务，右键菜单管理
+- ✅ **Nuitka 编译打包** - 支持编译为独立 `.exe` 可执行文件，无需 Python 环境
 - ✅ **防封号保护系统** - 多层防护机制降低账号封禁风险
   - 增强版速率限制（分钟/小时/天三级限制）
   - 人类行为模拟（随机思考时间、打字速度）
@@ -98,6 +100,8 @@ WeChat-MCP-Server/
 │   ├── 📄 gui_operations.py         # GUI 操作（输入、搜索、发送）Mixin
 │   ├── 📄 config.py                 # 配置管理模块
 │   ├── 📄 message_queue.py          # 消息队列 + 后台 Worker（SQLite 持久化）
+│   ├── 📄 paths.py                  # 路径工具模块（兼容源码/编译模式）
+│   ├── 📄 systray_app.py            # 系统托盘应用模块（pystray + 后台 uvicorn）
 │   └── 📂 anti_ban/                 # 防封号保护系统
 │       ├── 📄 __init__.py           # 防封号包初始化
 │       ├── 📄 enhanced_rate_limiter.py    # 增强版速率限制器
@@ -123,6 +127,9 @@ WeChat-MCP-Server/
 │   ├── 📄 config.moderate.json       # 中等模式配置模板
 │   ├── 📄 config.aggressive.json     # 激进模式配置模板
 │   └── 📄 messages.db               # 消息队列数据库（运行时自动生成）
+├── 📂 assets/
+│   └── 📄 icon.ico                  # 应用图标（托盘图标 + 编译 exe 图标）
+├── 📄 build.py                      # Nuitka 编译构建脚本
 ├── 📄 requirements.txt              # 依赖包列表
 ├── 📄 LICENSE                       # 许可证文件
 └── 📄 README.md                     # 项目说明文档
@@ -336,6 +343,9 @@ python src/mcp_server.py --transport streamable-http
 
 # 指定端口和监听地址
 python src/mcp_server.py --transport streamable-http --port 8765 --host 0.0.0.0
+
+# 系统托盘模式（后台运行，托盘图标管理）
+python src/mcp_server.py --transport streamable-http --systray
 
 # stdio 模式（仅 MCP，无 HTTP API）
 python src/mcp_server.py
@@ -786,8 +796,46 @@ SDK 自动处理的协议功能：
 - [x] ~~HTTP RESTful API~~ ✅ **已完成**
 - [x] ~~防封号保护系统~~ ✅ **已完成**
 - [x] ~~本地持久化消息队列~~ ✅ **已完成**
+- [x] ~~系统托盘模式~~ ✅ **已完成**
+- [x] ~~Nuitka 编译打包~~ ✅ **已完成**
 - [ ] 支持macOS和Linux系统
 - [ ] 增加更多微信操作功能（如图片、视频等）
+
+## 📦 编译构建
+
+项目支持通过 Nuitka 编译为独立的 `.exe` 可执行文件，编译后无需 Python 环境即可运行。
+
+### 前置条件
+
+- 已安装 Python 3.10+ 和项目依赖
+- 已安装 Nuitka：`pip install nuitka`
+- 已安装 C 编译器（如 MSVC 或 MinGW64）
+
+### 编译
+
+```bash
+# 编译为单文件 exe（默认 onefile 模式）
+python build.py
+
+# 编译为目录模式（调试用，速度更快）
+python build.py --standalone
+```
+
+编译完成后，可执行文件将输出到 `dist/` 目录。
+
+### 运行编译版本
+
+编译后的 `.exe` 文件会自动以系统托盘模式运行（streamable-http 传输），无需任何命令行参数：
+
+```bash
+# 直接双击运行或命令行启动
+dist/wechat-mcp-server.exe
+```
+
+编译版本的默认行为：
+- 传输模式自动设为 `streamable-http`
+- 自动启用系统托盘模式
+- 配置文件和数据库存放在 exe 同级的 `data/` 目录
 
 
 ## 💖 支持我们
