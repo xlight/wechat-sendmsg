@@ -225,12 +225,8 @@ class WeChatController:
                     self.logger.debug(f"找到 Chrome 主窗口: hwnd={hwnd}, size={width}x{height}, visible={is_visible}")
                     chrome_windows.append((hwnd, width * height))  # 存储窗口和面积（不论可见性）
                 return True
-
-            # 跳过其他不可见窗口
-            if not is_visible:
-                return True
-
-            # 【次优先级】Qt 窗口（可能是主窗口或联系人列表窗口，根据大小区分）
+            
+            # 【次优先级】Qt 窗口（可能是主窗口或联系人列表窗口，根据大小区分）- 不论可见性
             if re.match(r"Qt\d+QWindowIcon", class_name) or re.match(r"Qt\d+QWindowOwnDC", class_name):
                 # 标题只有"微信"或"WeChat"，没有聊天对象名称
                 if window_text in ["微信", "WeChat"]:
@@ -241,17 +237,24 @@ class WeChatController:
                     # 根据窗口大小区分主窗口和联系人列表窗口
                     # 主窗口通常很大（宽或高至少有一个>=800），联系人列表窗口较小（宽高都<800）
                     if width >= 800 or height >= 800:
-                        self.logger.debug(f"找到主窗口（Qt大窗口）: hwnd={hwnd}, size={width}x{height}")
-                        main_windows.append(hwnd)
+                        self.logger.debug(f"找到主窗口（Qt大窗口）: hwnd={hwnd}, size={width}x{height}, visible={is_visible}")
+                        main_windows.append(hwnd)  # 不论可见性都添加
                     else:
-                        self.logger.debug(f"找到联系人列表窗口（Qt小窗口）: hwnd={hwnd}, size={width}x{height}")
-                        contact_list_windows.append(hwnd)
+                        # 小窗口只在可见时添加
+                        if is_visible:
+                            self.logger.debug(f"找到联系人列表窗口（Qt小窗口）: hwnd={hwnd}, size={width}x{height}")
+                            contact_list_windows.append(hwnd)
                     return True
                 # 标题包含聊天对象名称，这是聊天窗口
                 elif "微信" in window_text or "WeChat" in window_text:
-                    self.logger.debug(f"找到聊天窗口（跳过）: hwnd={hwnd}, class={class_name}, text={window_text}")
-                    chat_windows.append(hwnd)
+                    if is_visible:  # 聊天窗口只在可见时添加
+                        self.logger.debug(f"找到聊天窗口: hwnd={hwnd}, class={class_name}, text={window_text}")
+                        chat_windows.append(hwnd)
                     return True
+
+            # 跳过其他不可见窗口
+            if not is_visible:
+                return True
 
             # 【低优先级】ChatWnd 类名（聊天悬浮窗，尽量避免）
             if class_name == "ChatWnd":
@@ -368,26 +371,36 @@ class WeChatController:
                         self.logger.warning(f"恢复 Chrome 主窗口失败: {e}")
                         continue
 
-                # 【较低优先级】恢复联系人列表窗口
+                # 【较低优先级】恢复 Qt 窗口（主窗口或联系人列表窗口，根据大小区分）
                 if win_info['text'] in ["微信", "WeChat"] and "Qt" in win_info['class']:
                     hwnd = win_info['hwnd']
-                    self.logger.info(f"尝试恢复联系人列表窗口: hwnd={hwnd}")
+                    width, height = win_info.get('size', (0, 0))
+                    
+                    # 根据大小区分主窗口和联系人列表窗口
+                    is_main_window = width >= 800 or height >= 800
+                    window_type = "Qt主窗口" if is_main_window else "联系人列表窗口"
+                    
+                    self.logger.info(f"尝试恢复{window_type}: hwnd={hwnd}, size={width}x{height}")
                     try:
+                        # 如果窗口最小化，先恢复
                         if win_info['iconic']:
                             win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
-                            self._natural_gui._random_pause(0.4, 0.7)
+                            self._natural_gui._random_pause(0.8, 1.5)
+                        # 如果窗口隐藏，显示它
                         if not win_info['visible']:
                             win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
-                            self._natural_gui._random_pause(0.4, 0.7)
+                            self._natural_gui._random_pause(0.8, 1.5)
+                        # 激活窗口
                         win32gui.SetForegroundWindow(hwnd)
-                        self._natural_gui._random_pause(0.2, 0.4)
+                        self._natural_gui._random_pause(0.5, 1.0)
 
+                        # 验证窗口现在是否可见
                         if win32gui.IsWindowVisible(hwnd):
-                            self.logger.info("✅ 成功恢复联系人列表窗口")
+                            self.logger.info(f"✅ 成功恢复{window_type}")
                             self._last_window_kind = "nt"
                             return hwnd
                     except Exception as e:
-                        self.logger.warning(f"恢复联系人列表窗口失败: {e}")
+                        self.logger.warning(f"恢复{window_type}失败: {e}")
                         continue
 
         self._last_window_kind = None
