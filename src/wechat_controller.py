@@ -17,6 +17,7 @@ import pyautogui
 import win32api
 import win32con
 import win32gui
+import win32process
 import win32clipboard
 
 try:
@@ -52,12 +53,77 @@ class WeChatController:
             window_hwnd = self._find_wechat_window()
             window_is_nt = self._last_window_kind == "nt" and window_hwnd is not None
 
-            for proc in psutil.process_iter(['name', 'exe']):
-                name = proc.info.get('name') or ""
-                if 'wechat' not in name.lower():
+            target_procs = []
+            if window_hwnd:
+                try:
+                    _, pid = win32process.GetWindowThreadProcessId(window_hwnd)
+                    if pid:
+                        target_procs.append(psutil.Process(pid))
+                except Exception as e:
+                    self.logger.warning(f"无法通过窗口句柄获取微信进程: {e}")
+
+            if not target_procs:
+                target_procs = list(psutil.process_iter(['name', 'exe']))
+
+            proc_list = list(target_procs)
+
+            for proc in proc_list:
+                try:
+                    info = getattr(proc, "info", None)
+                    if info is not None:
+                        name = info.get('name') or ""
+                        exe = info.get('exe')
+                    else:
+                        name = proc.name() or ""
+                        exe = proc.exe()
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
 
-                exe = proc.info.get('exe')
+                lower_name = name.lower()
+                if 'wechatappex' in lower_name:
+                    continue
+                if 'weixin' not in lower_name:
+                    continue
+
+                if not exe:
+                    continue
+
+                version_info = win32api.GetFileVersionInfo(exe, "\\")
+                version = f"{version_info['FileVersionMS'] >> 16}.{version_info['FileVersionMS'] & 0xFFFF}.{version_info['FileVersionLS'] >> 16}.{version_info['FileVersionLS'] & 0xFFFF}"
+                self.wechat_version = version
+
+                try:
+                    major_version = int(version.split('.')[0])
+                except Exception:
+                    major_version = 0
+
+                self.is_nt_version = window_is_nt or major_version >= 4
+                if self.is_nt_version and major_version >= 4:
+                    self.logger.info(f"Detected WeChat NT framework version: {version}")
+                elif self.is_nt_version and window_is_nt:
+                    self.logger.info(f"Detected WeChat NT framework window (file version: {version})")
+                else:
+                    self.logger.info(f"Detected WeChat legacy version (<4.0): {version} (will be skipped)")
+                return version
+
+            for proc in proc_list:
+                try:
+                    info = getattr(proc, "info", None)
+                    if info is not None:
+                        name = info.get('name') or ""
+                        exe = info.get('exe')
+                    else:
+                        name = proc.name() or ""
+                        exe = proc.exe()
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+
+                lower_name = name.lower()
+                if 'wechatappex' in lower_name:
+                    continue
+                if 'wechat' not in lower_name:
+                    continue
+
                 if not exe:
                     continue
 
@@ -606,6 +672,27 @@ class WeChatController:
                 result["stage"] = "find_window"
                 result["reason"] = "wechat_window_not_found"
                 return result
+
+            # 检查窗口大小（添加警告）
+            try:
+                rect = win32gui.GetWindowRect(hwnd)
+                window_width = rect[2] - rect[0]
+                window_height = rect[3] - rect[1]
+                
+                # 窗口太小的警告阈值
+                MIN_WINDOW_WIDTH = 600
+                MIN_WINDOW_HEIGHT = 400
+                
+                if window_width < MIN_WINDOW_WIDTH or window_height < MIN_WINDOW_HEIGHT:
+                    self.logger.warning(
+                        f"⚠️ 微信窗口尺寸过小 ({window_width}x{window_height})，"
+                        f"建议至少 {MIN_WINDOW_WIDTH}x{MIN_WINDOW_HEIGHT}，"
+                        f"可能导致输入框定位失败"
+                    )
+                    result["window_size"] = f"{window_width}x{window_height}"
+                    result["window_warning"] = "window_too_small"
+            except Exception as e:
+                self.logger.debug(f"检查窗口大小时出错: {e}")
 
             if not self._activate_window(hwnd):
                 result["stage"] = "activate_window"

@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WeChat MCP Server - 测试工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            line-height: 1.6;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        header h1 {
+            font-size: 2em;
+            font-weight: 700;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 15px;
+        }
+
+        .nav-link {
+            color: white;
+            text-decoration: none;
+            padding: 8px 20px;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.2);
+            transition: background 0.3s;
+        }
+
+        .nav-link:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .tabs {
+            display: flex;
+            background: #f8f9fa;
+            border-bottom: 2px solid #dee2e6;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+            border-bottom: 3px solid transparent;
+        }
+
+        .tab:hover {
+            background: #e9ecef;
+        }
+
+        .tab.active {
+            background: white;
+            border-bottom-color: #667eea;
+            color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+            padding: 30px;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 1em;
+            font-family: inherit;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-group textarea {
+            font-family: 'Courier New', monospace;
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 12px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+        }
+
+        .btn-small {
+            padding: 8px 20px;
+            font-size: 0.9em;
+        }
+
+        .response-section {
+            margin-top: 30px;
+        }
+
+        .response-section h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+
+        .response-box {
+            background: #f8f9fa;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .response-box h4 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+
+        .response-box pre {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            margin: 0;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 5px;
+            font-weight: 600;
+            font-size: 0.9em;
+            margin-left: 10px;
+        }
+
+        .status-success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .event-log {
+            max-height: 400px;
+            overflow-y: auto;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+        }
+
+        .event-item {
+            padding: 8px 0;
+            border-bottom: 1px solid #333;
+        }
+
+        .event-item:last-child {
+            border-bottom: none;
+        }
+
+        .event-time {
+            color: #808080;
+            margin-right: 10px;
+        }
+
+        .event-type {
+            color: #4ec9b0;
+            margin-right: 10px;
+            font-weight: 600;
+        }
+
+        .event-data {
+            color: #ce9178;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            header {
+                padding: 20px;
+            }
+
+            header h1 {
+                font-size: 1.5em;
+                margin-bottom: 10px;
+            }
+
+            .nav-links {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .tab-content {
+                padding: 20px;
+            }
+
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+
+            .btn {
+                width: 100%;
+                margin-right: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>WeChat MCP Server - 测试工具</h1>
+            <div class="nav-links">
+                <a href="/" class="nav-link">返回首页</a>
+            </div>
+        </header>
+
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('http-api')">HTTP API 测试</div>
+            <div class="tab" onclick="switchTab('mcp-sse')">MCP SSE 测试</div>
+            <div class="tab" onclick="switchTab('mcp-stream')">MCP Stream 测试</div>
+        </div>
+
+        <!-- HTTP API 测试标签页 -->
+        <div id="http-api" class="tab-content active">
+            <h2>HTTP API 测试</h2>
+            
+            <div class="form-group">
+                <label>测试功能</label>
+                <select id="httpApiFunction" onchange="changeHttpApiFunction()">
+                    <option value="send_message">发送消息</option>
+                    <option value="status">查询状态</option>
+                    <option value="anti_ban_stats">防封号统计</option>
+                    <option value="anti_ban_config">防封号配置</option>
+                </select>
+            </div>
+
+            <!-- 发送消息表单 -->
+            <div id="sendMessageForm">
+                <div class="form-group">
+                    <label>联系人名称</label>
+                    <input type="text" id="contactName" placeholder="例如：文件传输助手" value="文件传输助手">
+                </div>
+                <div class="form-group">
+                    <label>消息内容</label>
+                    <textarea id="messageContent" rows="4" placeholder="输入要发送的消息内容"></textarea>
+                </div>
+            </div>
+
+            <div>
+                <button class="btn" onclick="executeHttpApi()" id="httpApiBtn">发送请求</button>
+                <button class="btn btn-secondary" onclick="clearHttpApiForm()">清空表单</button>
+                <button class="btn btn-secondary btn-small" onclick="copyToClipboard('httpResponseBody')">复制响应</button>
+            </div>
+
+            <div class="response-section">
+                <h3>请求详情</h3>
+                <div class="response-box">
+                    <h4>请求方法和 URL</h4>
+                    <pre id="httpRequestInfo">等待请求...</pre>
+                </div>
+                <div class="response-box">
+                    <h4>请求体</h4>
+                    <pre id="httpRequestBody">-</pre>
+                </div>
+            </div>
+
+            <div class="response-section">
+                <h3>响应详情</h3>
+                <div class="response-box">
+                    <h4>状态码 <span id="httpStatusBadge"></span></h4>
+                    <pre id="httpResponseStatus">等待响应...</pre>
+                </div>
+                <div class="response-box">
+                    <h4>响应体</h4>
+                    <pre id="httpResponseBody">-</pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- MCP SSE 测试标签页 -->
+        <div id="mcp-sse" class="tab-content">
+            <h2>MCP SSE 测试</h2>
+            
+            <div class="alert alert-info">
+                <strong>提示：</strong> SSE (Server-Sent Events) 模式下，客户端通过 EventSource 连接服务器接收事件，通过 POST 发送请求。
+            </div>
+
+            <div class="form-group">
+                <label>连接状态 <span id="sseStatusBadge" class="status-badge status-error">未连接</span></label>
+                <div>
+                    <button class="btn btn-success" onclick="connectSSE()" id="sseConnectBtn">连接 SSE</button>
+                    <button class="btn btn-danger" onclick="disconnectSSE()" id="sseDisconnectBtn" disabled>断开连接</button>
+                    <button class="btn btn-secondary btn-small" onclick="clearSSELog()">清空日志</button>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>MCP 方法</label>
+                <select id="sseMethod" onchange="changeSseMethod()">
+                    <option value="initialize">initialize</option>
+                    <option value="tools/list">tools/list</option>
+                    <option value="tools/call">tools/call (send_message)</option>
+                </select>
+            </div>
+
+            <!-- 动态参数表单 -->
+            <div id="sseParamsForm"></div>
+
+            <div>
+                <button class="btn" onclick="sendSSERequest()" id="sseSendBtn" disabled>发送请求</button>
+            </div>
+
+            <div class="response-section">
+                <h3>SSE 事件日志</h3>
+                <div class="event-log" id="sseEventLog">
+                    <div class="event-item">
+                        <span class="event-time">[等待连接]</span>
+                        <span class="event-type">INFO</span>
+                        <span class="event-data">点击"连接 SSE"开始接收事件</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MCP Stream 测试标签页 -->
+        <div id="mcp-stream" class="tab-content">
+            <h2>MCP Stream 测试</h2>
+            
+            <div class="alert alert-info">
+                <strong>提示：</strong> Stream 模式使用 NDJSON 格式 (每行一个 JSON 对象)，支持批量请求。
+            </div>
+
+            <div class="form-group">
+                <label>NDJSON 请求（每行一个 JSON-RPC 请求）</label>
+                <textarea id="streamRequest" rows="10" placeholder='例如：
+{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"web-client","version":"1.0.0"}},"id":1}
+{"jsonrpc":"2.0","method":"tools/list","id":2}'></textarea>
+            </div>
+
+            <div>
+                <button class="btn" onclick="sendStreamRequest()" id="streamSendBtn">发送请求</button>
+                <button class="btn btn-secondary" onclick="clearStreamForm()">清空</button>
+                <button class="btn btn-secondary btn-small" onclick="loadTemplate('initialize')">Initialize 模板</button>
+                <button class="btn btn-secondary btn-small" onclick="loadTemplate('tools_list')">Tools/List 模板</button>
+                <button class="btn btn-secondary btn-small" onclick="loadTemplate('full')">完整流程模板</button>
+                <button class="btn btn-secondary btn-small" onclick="copyToClipboard('streamResponse')">复制响应</button>
+            </div>
+
+            <div class="response-section">
+                <h3>NDJSON 响应</h3>
+                <div class="response-box">
+                    <pre id="streamResponse">等待响应...</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量
+        let eventSource = null;
+        let sseRequestId = 1;
+
+        // 标签页切换
+        function switchTab(tabId) {
+            // 隐藏所有标签内容
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+
+            // 显示选中的标签
+            document.getElementById(tabId).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        // ========== HTTP API 测试功能 ==========
+
+        function changeHttpApiFunction() {
+            const func = document.getElementById('httpApiFunction').value;
+            const sendMessageForm = document.getElementById('sendMessageForm');
+            const btn = document.getElementById('httpApiBtn');
+
+            if (func === 'send_message') {
+                sendMessageForm.style.display = 'block';
+                btn.textContent = '发送消息';
+            } else {
+                sendMessageForm.style.display = 'none';
+                btn.textContent = '发送请求';
+            }
+        }
+
+        async function executeHttpApi() {
+            const func = document.getElementById('httpApiFunction').value;
+            let url = '';
+            let method = 'GET';
+            let body = null;
+
+            // 根据选择的功能设置请求参数
+            switch (func) {
+                case 'send_message':
+                    url = '/api/v1/messages/send';
+                    method = 'POST';
+                    body = {
+                        contact_name: document.getElementById('contactName').value,
+                        message: document.getElementById('messageContent').value
+                    };
+                    if (!body.contact_name || !body.message) {
+                        alert('请填写联系人名称和消息内容');
+                        return;
+                    }
+                    break;
+                case 'status':
+                    url = '/api/v1/status';
+                    break;
+                case 'anti_ban_stats':
+                    url = '/api/v1/anti-ban/stats';
+                    break;
+                case 'anti_ban_config':
+                    url = '/api/v1/anti-ban/config';
+                    break;
+            }
+
+            // 更新请求详情显示
+            document.getElementById('httpRequestInfo').textContent = `${method} ${url}`;
+            document.getElementById('httpRequestBody').textContent = body ? JSON.stringify(body, null, 2) : '-';
+
+            // 显示加载状态
+            const btn = document.getElementById('httpApiBtn');
+            btn.disabled = true;
+            btn.innerHTML = '发送中... <span class="loading-spinner"></span>';
+
+            try {
+                const options = {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                };
+
+                if (body) {
+                    options.body = JSON.stringify(body);
+                }
+
+                const response = await fetch(url, options);
+                const data = await response.json();
+
+                // 更新响应显示
+                const statusClass = response.ok ? 'status-success' : 'status-error';
+                document.getElementById('httpStatusBadge').innerHTML = `<span class="${statusClass}">${response.status} ${response.statusText}</span>`;
+                document.getElementById('httpResponseStatus').textContent = `${response.status} ${response.statusText}`;
+                document.getElementById('httpResponseBody').textContent = JSON.stringify(data, null, 2);
+
+                // 保存到 localStorage
+                if (func === 'send_message') {
+                    localStorage.setItem('contactName', body.contact_name);
+                    localStorage.setItem('messageContent', body.message);
+                }
+            } catch (error) {
+                document.getElementById('httpStatusBadge').innerHTML = '<span class="status-error">错误</span>';
+                document.getElementById('httpResponseStatus').textContent = '请求失败';
+                document.getElementById('httpResponseBody').textContent = `错误: ${error.message}`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = func === 'send_message' ? '发送消息' : '发送请求';
+            }
+        }
+
+        function clearHttpApiForm() {
+            document.getElementById('contactName').value = '文件传输助手';
+            document.getElementById('messageContent').value = '';
+        }
+
+        // ========== MCP SSE 测试功能 ==========
+
+        function connectSSE() {
+            if (eventSource) {
+                addSSELog('WARN', '已经连接到 SSE');
+                return;
+            }
+
+            addSSELog('INFO', '正在连接到 /mcp/sse...');
+            
+            eventSource = new EventSource('/mcp/sse');
+
+            eventSource.onopen = function() {
+                addSSELog('SUCCESS', 'SSE 连接已建立');
+                document.getElementById('sseStatusBadge').className = 'status-badge status-success';
+                document.getElementById('sseStatusBadge').textContent = '已连接';
+                document.getElementById('sseConnectBtn').disabled = true;
+                document.getElementById('sseDisconnectBtn').disabled = false;
+                document.getElementById('sseSendBtn').disabled = false;
+            };
+
+            eventSource.addEventListener('mcp-response', function(e) {
+                const data = JSON.parse(e.data);
+                addSSELog('RESPONSE', JSON.stringify(data, null, 2));
+            });
+
+            eventSource.addEventListener('mcp-error', function(e) {
+                const data = JSON.parse(e.data);
+                addSSELog('ERROR', JSON.stringify(data, null, 2));
+            });
+
+            eventSource.addEventListener('keepalive', function(e) {
+                addSSELog('KEEPALIVE', 'Heartbeat received');
+            });
+
+            eventSource.onerror = function(e) {
+                addSSELog('ERROR', 'SSE 连接错误或已断开');
+                disconnectSSE();
+            };
+        }
+
+        function disconnectSSE() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+                addSSELog('INFO', 'SSE 连接已断开');
+            }
+            
+            document.getElementById('sseStatusBadge').className = 'status-badge status-error';
+            document.getElementById('sseStatusBadge').textContent = '未连接';
+            document.getElementById('sseConnectBtn').disabled = false;
+            document.getElementById('sseDisconnectBtn').disabled = true;
+            document.getElementById('sseSendBtn').disabled = true;
+        }
+
+        function changeSseMethod() {
+            const method = document.getElementById('sseMethod').value;
+            const paramsForm = document.getElementById('sseParamsForm');
+
+            if (method === 'tools/call') {
+                paramsForm.innerHTML = `
+                    <div class="form-group">
+                        <label>联系人名称</label>
+                        <input type="text" id="sseContactName" value="文件传输助手">
+                    </div>
+                    <div class="form-group">
+                        <label>消息内容</label>
+                        <textarea id="sseMessageContent" rows="3"></textarea>
+                    </div>
+                `;
+            } else {
+                paramsForm.innerHTML = '';
+            }
+        }
+
+        async function sendSSERequest() {
+            const method = document.getElementById('sseMethod').value;
+            let request = {
+                jsonrpc: "2.0",
+                method: method,
+                id: sseRequestId++
+            };
+
+            // 根据方法设置参数
+            if (method === 'initialize') {
+                request.params = {
+                    protocolVersion: "2024-11-05",
+                    capabilities: {},
+                    clientInfo: {
+                        name: "web-client",
+                        version: "1.0.0"
+                    }
+                };
+            } else if (method === 'tools/call') {
+                const contactName = document.getElementById('sseContactName').value;
+                const message = document.getElementById('sseMessageContent').value;
+                
+                if (!contactName || !message) {
+                    alert('请填写联系人名称和消息内容');
+                    return;
+                }
+
+                request.params = {
+                    name: "send_message",
+                    arguments: {
+                        contact_name: contactName,
+                        message: message
+                    }
+                };
+            }
+
+            addSSELog('REQUEST', JSON.stringify(request, null, 2));
+
+            try {
+                const response = await fetch('/mcp/sse', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(request)
+                });
+
+                if (response.status === 202) {
+                    addSSELog('INFO', '请求已发送，等待 SSE 响应...');
+                } else {
+                    addSSELog('ERROR', `请求失败: ${response.status} ${response.statusText}`);
+                }
+            } catch (error) {
+                addSSELog('ERROR', `请求错误: ${error.message}`);
+            }
+        }
+
+        function addSSELog(type, message) {
+            const log = document.getElementById('sseEventLog');
+            const time = new Date().toLocaleTimeString();
+            const item = document.createElement('div');
+            item.className = 'event-item';
+            item.innerHTML = `
+                <span class="event-time">[${time}]</span>
+                <span class="event-type">${type}</span>
+                <span class="event-data">${message}</span>
+            `;
+            log.appendChild(item);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function clearSSELog() {
+            document.getElementById('sseEventLog').innerHTML = '';
+        }
+
+        // ========== MCP Stream 测试功能 ==========
+
+        async function sendStreamRequest() {
+            const requestText = document.getElementById('streamRequest').value.trim();
+            
+            if (!requestText) {
+                alert('请输入 NDJSON 请求');
+                return;
+            }
+
+            // 验证 NDJSON 格式
+            const lines = requestText.split('\n').filter(line => line.trim());
+            for (const line of lines) {
+                try {
+                    JSON.parse(line);
+                } catch (e) {
+                    alert(`JSON 格式错误: ${e.message}\n行内容: ${line}`);
+                    return;
+                }
+            }
+
+            const btn = document.getElementById('streamSendBtn');
+            btn.disabled = true;
+            btn.innerHTML = '发送中... <span class="loading-spinner"></span>';
+
+            document.getElementById('streamResponse').textContent = '等待响应...';
+
+            try {
+                const response = await fetch('/mcp/stream', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-ndjson'
+                    },
+                    body: requestText
+                });
+
+                const responseText = await response.text();
+                
+                // 格式化 NDJSON 响应
+                const responseLines = responseText.split('\n').filter(line => line.trim());
+                const formatted = responseLines.map(line => {
+                    try {
+                        return JSON.stringify(JSON.parse(line), null, 2);
+                    } catch {
+                        return line;
+                    }
+                }).join('\n\n');
+
+                document.getElementById('streamResponse').textContent = formatted || '(空响应)';
+            } catch (error) {
+                document.getElementById('streamResponse').textContent = `错误: ${error.message}`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '发送请求';
+            }
+        }
+
+        function clearStreamForm() {
+            document.getElementById('streamRequest').value = '';
+            document.getElementById('streamResponse').textContent = '等待响应...';
+        }
+
+        function loadTemplate(type) {
+            let template = '';
+            
+            if (type === 'initialize') {
+                template = '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"web-client","version":"1.0.0"}},"id":1}';
+            } else if (type === 'tools_list') {
+                template = '{"jsonrpc":"2.0","method":"tools/list","id":1}';
+            } else if (type === 'full') {
+                template = `{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"web-client","version":"1.0.0"}},"id":1}
+{"jsonrpc":"2.0","method":"tools/list","id":2}
+{"jsonrpc":"2.0","method":"tools/call","params":{"name":"send_message","arguments":{"contact_name":"文件传输助手","message":"测试消息"}},"id":3}`;
+            }
+            
+            document.getElementById('streamRequest').value = template;
+        }
+
+        // ========== 通用工具函数 ==========
+
+        function copyToClipboard(elementId) {
+            const element = document.getElementById(elementId);
+            const text = element.textContent;
+            
+            navigator.clipboard.writeText(text).then(() => {
+                alert('已复制到剪贴板');
+            }).catch(err => {
+                alert('复制失败: ' + err);
+            });
+        }
+
+        // ========== 页面加载初始化 ==========
+
+        window.addEventListener('DOMContentLoaded', function() {
+            // 从 localStorage 恢复输入
+            const savedContactName = localStorage.getItem('contactName');
+            const savedMessageContent = localStorage.getItem('messageContent');
+            
+            if (savedContactName) {
+                document.getElementById('contactName').value = savedContactName;
+            }
+            if (savedMessageContent) {
+                document.getElementById('messageContent').value = savedMessageContent;
+            }
+
+            // 初始化 SSE 方法表单
+            changeSseMethod();
+        });
+
+        // 页面卸载时断开 SSE
+        window.addEventListener('beforeunload', function() {
+            if (eventSource) {
+                eventSource.close();
+            }
+        });
+    </script>
+</body>
+</html>
