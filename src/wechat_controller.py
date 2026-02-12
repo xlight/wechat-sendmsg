@@ -360,13 +360,13 @@ class WeChatController:
                     # 使用自然点击代替直接点击
                     self._natural_gui.natural_click(int(click_x), int(click_y))
                     self.logger.error(f"尝试点击输入框位置: ({click_x}, {click_y})")
-                    time.sleep(5.4)
-                    pyautogui.typewrite('a')
-                    self.logger.error("输入测试字符 'a' 来验证输入框是否激活")
-                    time.sleep(5.1)
-                    pyautogui.press('backspace')
-                    self.logger.error("删除测试字符 'a'")
-                    time.sleep(5.1)
+                    # time.sleep(5.4)
+                    # pyautogui.typewrite('a')
+                    # self.logger.error("输入测试字符 'a' 来验证输入框是否激活")
+                    # time.sleep(5.1)
+                    # pyautogui.press('backspace')
+                    # self.logger.error("删除测试字符 'a'")
+                    # time.sleep(5.1)
                     return True
                 except Exception:
                     continue
@@ -521,7 +521,7 @@ class WeChatController:
 
     def _send_text_nt(self, message: str) -> bool:
         """发送文本消息（NT 框架）。
-        
+
         按键优先级：Alt+S（主要） > Enter（备用） > Ctrl+Enter（备用）
         """
         self.logger.debug(f"准备发送消息: {message[:20]}...")
@@ -534,7 +534,7 @@ class WeChatController:
                 if not self._find_and_click_input_box():
                     self.logger.error("再次尝试寻找输入框失败，发送消息中止")
                     return False
-            
+
             self.logger.debug("输入框已点击，准备输入消息...")
             self._natural_gui._random_pause(0.3, 0.6)  # 等待输入框稳定
 
@@ -548,7 +548,7 @@ class WeChatController:
             original_data = self._set_clipboard_and_paste(message)
             self.logger.debug("文本输入完成，准备发送...")
             self._natural_gui._random_pause(0.4, 0.8)  # 等待输入稳定
-            
+
             # 发送消息 - 优先使用 Alt+S
             try:
                 pyautogui.hotkey('alt', 's')
