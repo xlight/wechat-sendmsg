@@ -65,8 +65,10 @@ class WeChatController(TrayManagerMixin, WindowFinderMixin, GUIOperationsMixin):
 
         self._detect_wechat_version()
 
-    async def send_text_message(self, contact_name: str, message: str) -> Dict[str, Any]:
-        """向指定联系人发送文本消息。
+    def send_text_message_sync(self, contact_name: str, message: str) -> Dict[str, Any]:
+        """向指定联系人发送文本消息（同步版本）。
+
+        该方法为纯同步方法，供 QueueWorker 通过 run_in_executor 调用。
 
         激活窗口的优先级：
         1. 通过配置的快捷键激活微信窗口（需用户在微信设置中配置）
@@ -156,6 +158,13 @@ class WeChatController(TrayManagerMixin, WindowFinderMixin, GUIOperationsMixin):
             result["stage"] = result["stage"] or "exception"
             result["reason"] = str(e)
             return result
+
+    async def send_text_message(self, contact_name: str, message: str) -> Dict[str, Any]:
+        """向指定联系人发送文本消息（异步封装）。
+
+        内部调用 send_text_message_sync()，保持向后兼容。
+        """
+        return self.send_text_message_sync(contact_name, message)
 
     async def schedule_message(self, contact_name: str, message: str, delay_seconds: float) -> bool:
         """安排在延迟后发送消息。"""

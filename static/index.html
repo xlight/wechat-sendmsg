@@ -156,6 +156,11 @@
             color: white;
         }
 
+        .method-delete {
+            background: #dc3545;
+            color: white;
+        }
+
         .endpoint-path {
             font-family: 'Courier New', monospace;
             font-size: 1.1em;
@@ -320,6 +325,7 @@
                 <div class="quick-actions">
                     <button class="btn btn-success" onclick="refreshStatus()">刷新状态</button>
                     <a href="/test" class="btn">打开测试工具</a>
+                    <a href="/queue" class="btn btn-secondary">队列管理</a>
                 </div>
             </div>
 
@@ -475,7 +481,7 @@ Mcp-Session-Id: &lt;从 POST /mcp 响应获取&gt;</pre>
 
                     <div class="endpoint-card">
                         <div class="endpoint-header">
-                            <span class="method-badge method-post">DELETE</span>
+                            <span class="method-badge method-delete">DELETE</span>
                             <span class="endpoint-path">/mcp</span>
                         </div>
                         <div class="endpoint-description">关闭 MCP 会话 — 通知服务器释放会话资源</div>
@@ -492,6 +498,7 @@ Mcp-Session-Id: &lt;从 POST /mcp 响应获取&gt;</pre>
                 <h2>快速访问</h2>
                 <div class="quick-actions">
                     <a href="/test" class="btn">测试工具</a>
+                    <a href="/queue" class="btn btn-secondary">队列管理</a>
                     <a href="/api/v1/status" class="btn btn-secondary" target="_blank">查看 JSON 状态</a>
                     <a href="https://github.com/modelcontextprotocol/specification" class="btn btn-success" target="_blank">MCP 协议文档</a>
                 </div>

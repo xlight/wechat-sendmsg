@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WeChat MCP Server - 队列管理</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            line-height: 1.6;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        header h1 {
+            font-size: 2em;
+            font-weight: 700;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 15px;
+        }
+
+        .nav-link {
+            color: white;
+            text-decoration: none;
+            padding: 8px 20px;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.2);
+            transition: background 0.3s;
+        }
+
+        .nav-link:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .content {
+            padding: 30px 40px;
+        }
+
+        /* 状态卡片区 */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            border-left: 4px solid #667eea;
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .stat-card .stat-value {
+            font-size: 2em;
+            font-weight: 700;
+            color: #333;
+        }
+
+        .stat-card .stat-label {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .stat-card.pending { border-left-color: #ffc107; }
+        .stat-card.pending .stat-value { color: #856404; }
+        .stat-card.processing { border-left-color: #17a2b8; }
+        .stat-card.processing .stat-value { color: #0c5460; }
+        .stat-card.completed { border-left-color: #28a745; }
+        .stat-card.completed .stat-value { color: #155724; }
+        .stat-card.failed { border-left-color: #dc3545; }
+        .stat-card.failed .stat-value { color: #721c24; }
+        .stat-card.cancelled { border-left-color: #6c757d; }
+        .stat-card.cancelled .stat-value { color: #495057; }
+        .stat-card.worker { border-left-color: #667eea; }
+
+        /* 筛选栏 */
+        .toolbar {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .toolbar select,
+        .toolbar input {
+            padding: 10px 15px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 0.95em;
+            font-family: inherit;
+            transition: border-color 0.3s;
+        }
+
+        .toolbar select:focus,
+        .toolbar input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.95em;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 3px 10px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%);
+            color: #333;
+        }
+
+        .btn-small {
+            padding: 6px 14px;
+            font-size: 0.85em;
+        }
+
+        .auto-refresh-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: auto;
+        }
+
+        .auto-refresh-toggle label {
+            font-size: 0.9em;
+            color: #666;
+            cursor: pointer;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #ccc;
+            transition: 0.3s;
+            border-radius: 24px;
+        }
+
+        .slider:before {
+            content: "";
+            position: absolute;
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: 0.3s;
+            border-radius: 50%;
+        }
+
+        .switch input:checked + .slider {
+            background-color: #667eea;
+        }
+
+        .switch input:checked + .slider:before {
+            transform: translateX(20px);
+        }
+
+        /* 消息表格 */
+        .table-container {
+            overflow-x: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.95em;
+        }
+
+        thead {
+            background: #f8f9fa;
+        }
+
+        th {
+            padding: 14px 16px;
+            text-align: left;
+            font-weight: 600;
+            color: #333;
+            border-bottom: 2px solid #dee2e6;
+            white-space: nowrap;
+        }
+
+        td {
+            padding: 12px 16px;
+            border-bottom: 1px solid #f0f0f0;
+            vertical-align: middle;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        tr.clickable {
+            cursor: pointer;
+        }
+
+        .msg-text {
+            max-width: 250px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 0.85em;
+        }
+
+        .status-pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-processing {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .status-completed {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-failed {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-cancelled {
+            background: #e2e3e5;
+            color: #495057;
+        }
+
+        .priority-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.85em;
+            font-weight: 600;
+            min-width: 28px;
+            text-align: center;
+        }
+
+        .priority-high {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .priority-normal {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .priority-low {
+            background: #e2e3e5;
+            color: #495057;
+        }
+
+        .actions-cell {
+            white-space: nowrap;
+        }
+
+        /* 分页 */
+        .pagination {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .pagination .page-info {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        /* 空状态 */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .empty-state p {
+            font-size: 1.1em;
+        }
+
+        /* 详情弹窗 */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .detail-row {
+            display: flex;
+            padding: 10px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .detail-label {
+            font-weight: 600;
+            color: #666;
+            min-width: 100px;
+            flex-shrink: 0;
+        }
+
+        .detail-value {
+            color: #333;
+            word-break: break-all;
+        }
+
+        .detail-value.message-content {
+            white-space: pre-wrap;
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: inherit;
+        }
+
+        .modal-actions {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        /* 错误提示 */
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 2000;
+            padding: 15px 25px;
+            border-radius: 8px;
+            font-weight: 600;
+            color: white;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease;
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .toast.success {
+            background: #28a745;
+        }
+
+        .toast.error {
+            background: #dc3545;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            header {
+                padding: 20px;
+            }
+
+            header h1 {
+                font-size: 1.5em;
+                margin-bottom: 10px;
+            }
+
+            .nav-links {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .content {
+                padding: 20px;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            }
+
+            .toolbar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .auto-refresh-toggle {
+                margin-left: 0;
+            }
+
+            th, td {
+                padding: 8px 10px;
+                font-size: 0.85em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>WeChat MCP Server - 队列管理</h1>
+            <div class="nav-links">
+                <a href="/" class="nav-link">返回首页</a>
+                <a href="/test" class="nav-link">测试工具</a>
+            </div>
+        </header>
+
+        <div class="content">
+            <!-- 状态概览卡片 -->
+            <div class="stats-grid" id="statsGrid">
+                <div class="stat-card worker">
+                    <div class="stat-value" id="workerStatus"><span class="loading"></span></div>
+                    <div class="stat-label">Worker 状态</div>
+                </div>
+                <div class="stat-card pending">
+                    <div class="stat-value" id="statPending">-</div>
+                    <div class="stat-label">待发送</div>
+                </div>
+                <div class="stat-card processing">
+                    <div class="stat-value" id="statProcessing">-</div>
+                    <div class="stat-label">发送中</div>
+                </div>
+                <div class="stat-card completed">
+                    <div class="stat-value" id="statCompleted">-</div>
+                    <div class="stat-label">已完成</div>
+                </div>
+                <div class="stat-card failed">
+                    <div class="stat-value" id="statFailed">-</div>
+                    <div class="stat-label">已失败</div>
+                </div>
+                <div class="stat-card cancelled">
+                    <div class="stat-value" id="statCancelled">-</div>
+                    <div class="stat-label">已取消</div>
+                </div>
+            </div>
+
+            <!-- 筛选栏 -->
+            <div class="toolbar">
+                <select id="statusFilter" onchange="resetAndLoad()">
+                    <option value="">全部状态</option>
+                    <option value="pending">待发送</option>
+                    <option value="processing">发送中</option>
+                    <option value="completed">已完成</option>
+                    <option value="failed">已失败</option>
+                    <option value="cancelled">已取消</option>
+                </select>
+                <button class="btn btn-secondary btn-small" onclick="refreshAll()">刷新</button>
+                <div class="auto-refresh-toggle">
+                    <label for="autoRefresh">自动刷新</label>
+                    <label class="switch">
+                        <input type="checkbox" id="autoRefresh" checked onchange="toggleAutoRefresh()">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- 消息表格 -->
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>联系人</th>
+                            <th>消息内容</th>
+                            <th>优先级</th>
+                            <th>状态</th>
+                            <th>创建时间</th>
+                            <th>计划时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="messageTable">
+                        <tr>
+                            <td colspan="8" class="empty-state"><p>加载中...</p></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 分页 -->
+            <div class="pagination">
+                <button class="btn btn-secondary btn-small" id="prevBtn" onclick="prevPage()" disabled>上一页</button>
+                <span class="page-info" id="pageInfo">-</span>
+                <button class="btn btn-secondary btn-small" id="nextBtn" onclick="nextPage()" disabled>下一页</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 详情弹窗 -->
+    <div class="modal-overlay" id="detailModal" onclick="closeModal(event)">
+        <div class="modal" onclick="event.stopPropagation()">
+            <h2>消息详情</h2>
+            <div id="detailContent"></div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary btn-small" onclick="closeModal()">关闭</button>
+                <button class="btn btn-danger btn-small" id="modalCancelBtn" style="display:none" onclick="cancelFromModal()">取消发送</button>
+                <button class="btn btn-warning btn-small" id="modalRetryBtn" style="display:none" onclick="retryFromModal()">重新发送</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast 提示 -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // ── 全局状态 ──
+        let currentOffset = 0;
+        const PAGE_SIZE = 20;
+        let totalMessages = 0;
+        let autoRefreshTimer = null;
+        let currentDetailId = null;
+
+        // ── 初始化 ──
+        window.addEventListener('DOMContentLoaded', function() {
+            refreshAll();
+            toggleAutoRefresh();
+        });
+
+        // ── 刷新全部 ──
+        function refreshAll() {
+            loadStats();
+            loadMessages();
+        }
+
+        // ── 加载统计 ──
+        function loadStats() {
+            fetch('/api/v1/queue/status')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (!data.ok) return;
+                    var s = data.stats;
+                    document.getElementById('workerStatus').textContent = data.worker_running ? '运行中' : '已停止';
+                    document.getElementById('statPending').textContent = s.pending;
+                    document.getElementById('statProcessing').textContent = s.processing;
+                    document.getElementById('statCompleted').textContent = s.completed;
+                    document.getElementById('statFailed').textContent = s.failed;
+                    document.getElementById('statCancelled').textContent = s.cancelled;
+                })
+                .catch(function(err) {
+                    document.getElementById('workerStatus').textContent = '错误';
+                    console.error('加载统计失败:', err);
+                });
+        }
+
+        // ── 加载消息列表 ──
+        function loadMessages() {
+            var status = document.getElementById('statusFilter').value;
+            var url = '/api/v1/queue/messages?limit=' + PAGE_SIZE + '&offset=' + currentOffset;
+            if (status) {
+                url += '&status=' + status;
+            }
+
+            fetch(url)
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (!data.ok) return;
+                    totalMessages = data.total;
+                    renderTable(data.messages);
+                    updatePagination();
+                })
+                .catch(function(err) {
+                    console.error('加载消息列表失败:', err);
+                    document.getElementById('messageTable').innerHTML =
+                        '<tr><td colspan="8" class="empty-state"><p>加载失败</p></td></tr>';
+                });
+        }
+
+        // ── 渲染表格 ──
+        function renderTable(messages) {
+            var tbody = document.getElementById('messageTable');
+
+            if (!messages || messages.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="empty-state"><p>暂无消息</p></td></tr>';
+                return;
+            }
+
+            var html = '';
+            for (var i = 0; i < messages.length; i++) {
+                var msg = messages[i];
+                html += '<tr class="clickable" onclick="showDetail(' + msg.id + ')">';
+                html += '<td>' + msg.id + '</td>';
+                html += '<td>' + escapeHtml(msg.contact_name) + '</td>';
+                html += '<td><div class="msg-text" title="' + escapeHtml(msg.message) + '">' + escapeHtml(msg.message) + '</div></td>';
+                html += '<td>' + renderPriority(msg.priority) + '</td>';
+                html += '<td>' + renderStatus(msg.status) + '</td>';
+                html += '<td>' + formatTime(msg.created_at) + '</td>';
+                html += '<td>' + formatTime(msg.scheduled_at) + '</td>';
+                html += '<td class="actions-cell">' + renderActions(msg) + '</td>';
+                html += '</tr>';
+            }
+            tbody.innerHTML = html;
+        }
+
+        // ── 渲染辅助函数 ──
+        function renderStatus(status) {
+            var labels = {
+                pending: '待发送',
+                processing: '发送中',
+                completed: '已完成',
+                failed: '已失败',
+                cancelled: '已取消'
+            };
+            return '<span class="status-badge status-' + status + '">' + (labels[status] || status) + '</span>';
+        }
+
+        function renderPriority(p) {
+            var cls = 'priority-normal';
+            if (p <= 3) cls = 'priority-high';
+            else if (p >= 7) cls = 'priority-low';
+            return '<span class="priority-badge ' + cls + '">' + p + '</span>';
+        }
+
+        function renderActions(msg) {
+            var html = '';
+            if (msg.status === 'pending') {
+                html += '<button class="btn btn-danger btn-small" onclick="event.stopPropagation(); cancelMessage(' + msg.id + ')">取消</button>';
+            }
+            if (msg.status === 'failed') {
+                html += '<button class="btn btn-warning btn-small" onclick="event.stopPropagation(); retryMessage(' + msg.id + ')">重试</button>';
+            }
+            return html || '-';
+        }
+
+        function formatTime(isoStr) {
+            if (!isoStr) return '-';
+            try {
+                var d = new Date(isoStr);
+                var month = String(d.getMonth() + 1).padStart(2, '0');
+                var day = String(d.getDate()).padStart(2, '0');
+                var h = String(d.getHours()).padStart(2, '0');
+                var m = String(d.getMinutes()).padStart(2, '0');
+                var s = String(d.getSeconds()).padStart(2, '0');
+                return month + '-' + day + ' ' + h + ':' + m + ':' + s;
+            } catch(e) {
+                return isoStr.substring(0, 19);
+            }
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        // ── 分页 ──
+        function updatePagination() {
+            var currentPage = Math.floor(currentOffset / PAGE_SIZE) + 1;
+            var totalPages = Math.max(1, Math.ceil(totalMessages / PAGE_SIZE));
+
+            document.getElementById('pageInfo').textContent = '第 ' + currentPage + ' / ' + totalPages + ' 页 (共 ' + totalMessages + ' 条)';
+            document.getElementById('prevBtn').disabled = currentOffset <= 0;
+            document.getElementById('nextBtn').disabled = currentOffset + PAGE_SIZE >= totalMessages;
+        }
+
+        function prevPage() {
+            currentOffset = Math.max(0, currentOffset - PAGE_SIZE);
+            loadMessages();
+        }
+
+        function nextPage() {
+            if (currentOffset + PAGE_SIZE < totalMessages) {
+                currentOffset += PAGE_SIZE;
+                loadMessages();
+            }
+        }
+
+        function resetAndLoad() {
+            currentOffset = 0;
+            loadMessages();
+        }
+
+        // ── 取消/重试操作 ──
+        function cancelMessage(id) {
+            fetch('/api/v1/queue/messages/' + id + '/cancel', { method: 'POST' })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.ok) {
+                        showToast('消息已取消', 'success');
+                        refreshAll();
+                    } else {
+                        showToast(data.error || '取消失败', 'error');
+                    }
+                })
+                .catch(function(err) {
+                    showToast('操作失败: ' + err.message, 'error');
+                });
+        }
+
+        function retryMessage(id) {
+            fetch('/api/v1/queue/messages/' + id + '/retry', { method: 'POST' })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.ok) {
+                        showToast('消息已重新加入队列', 'success');
+                        refreshAll();
+                    } else {
+                        showToast(data.error || '重试失败', 'error');
+                    }
+                })
+                .catch(function(err) {
+                    showToast('操作失败: ' + err.message, 'error');
+                });
+        }
+
+        // ── 消息详情弹窗 ──
+        function showDetail(id) {
+            currentDetailId = id;
+            fetch('/api/v1/queue/messages/' + id)
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (!data.ok) {
+                        showToast(data.error || '获取详情失败', 'error');
+                        return;
+                    }
+                    var msg = data.message;
+                    var html = '';
+                    html += detailRow('消息 ID', msg.id);
+                    html += detailRow('联系人', escapeHtml(msg.contact_name));
+                    html += '<div class="detail-row"><div class="detail-label">消息内容</div><div class="detail-value message-content">' + escapeHtml(msg.message) + '</div></div>';
+                    html += detailRow('状态', renderStatus(msg.status));
+                    html += detailRow('发送模式', msg.mode);
+                    html += detailRow('优先级', renderPriority(msg.priority));
+                    html += detailRow('重试次数', msg.retry_count + ' / ' + msg.max_retries);
+                    html += detailRow('创建时间', msg.created_at);
+                    html += detailRow('计划时间', msg.scheduled_at);
+                    html += detailRow('更新时间', msg.updated_at);
+                    if (msg.error_message) {
+                        html += '<div class="detail-row"><div class="detail-label">错误信息</div><div class="detail-value" style="color:#dc3545">' + escapeHtml(msg.error_message) + '</div></div>';
+                    }
+
+                    document.getElementById('detailContent').innerHTML = html;
+
+                    // 操作按钮显示控制
+                    document.getElementById('modalCancelBtn').style.display = msg.status === 'pending' ? 'inline-block' : 'none';
+                    document.getElementById('modalRetryBtn').style.display = msg.status === 'failed' ? 'inline-block' : 'none';
+
+                    document.getElementById('detailModal').classList.add('active');
+                })
+                .catch(function(err) {
+                    showToast('获取详情失败: ' + err.message, 'error');
+                });
+        }
+
+        function detailRow(label, value) {
+            return '<div class="detail-row"><div class="detail-label">' + label + '</div><div class="detail-value">' + value + '</div></div>';
+        }
+
+        function closeModal(event) {
+            if (event && event.target !== document.getElementById('detailModal')) return;
+            document.getElementById('detailModal').classList.remove('active');
+            currentDetailId = null;
+        }
+
+        function cancelFromModal() {
+            if (currentDetailId) {
+                cancelMessage(currentDetailId);
+                closeModal();
+            }
+        }
+
+        function retryFromModal() {
+            if (currentDetailId) {
+                retryMessage(currentDetailId);
+                closeModal();
+            }
+        }
+
+        // ── 自动刷新 ──
+        function toggleAutoRefresh() {
+            var enabled = document.getElementById('autoRefresh').checked;
+            if (autoRefreshTimer) {
+                clearInterval(autoRefreshTimer);
+                autoRefreshTimer = null;
+            }
+            if (enabled) {
+                autoRefreshTimer = setInterval(refreshAll, 5000);
+            }
+        }
+
+        // ── Toast 提示 ──
+        function showToast(message, type) {
+            var toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast ' + type + ' show';
+            setTimeout(function() {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

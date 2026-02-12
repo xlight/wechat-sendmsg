@@ -27,6 +27,7 @@ from starlette.staticfiles import StaticFiles
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config import Config
+from message_queue import MessageQueue, QueueWorker
 from wechat_controller import WeChatController
 
 # ── 日志配置 ──
@@ -74,21 +75,58 @@ mcp = FastMCP(
     streamable_http_path="/",  # Mount 到 /mcp 后最终路径为 /mcp
 )
 
+# ── 全局消息队列引用（在 lifespan 中赋值） ──
+_message_queue: Optional[MessageQueue] = None
+_queue_worker: Optional[QueueWorker] = None
+
 
 @mcp.tool()
-async def send_wechat_message(contact_name: str, message: str) -> str:
+async def send_wechat_message(
+    contact_name: str,
+    message: str,
+    mode: str = "queue",
+    priority: int = 5,
+) -> str:
     """向微信联系人或群组发送文本消息。
 
     Args:
         contact_name: 要发送消息的微信联系人或群组名称
         message: 要发送的文本消息内容
+        mode: 发送模式，'queue'（默认，异步入队）或 'sync'（同步立即发送）
+        priority: 消息优先级，0-10，数值越小优先级越高，默认 5
     """
+    global _message_queue, _queue_worker
+
+    # 优先级范围校验
+    priority = max(0, min(10, priority))
+
+    # 队列模式：如果队列可用，将消息入队
+    if mode == "queue" and _message_queue is not None:
+        msg_id = _message_queue.enqueue(
+            contact_name=contact_name,
+            message=message,
+            mode="queue",
+            priority=priority,
+        )
+        return f"消息已加入发送队列: id={msg_id}, 联系人={contact_name}, 优先级={priority}"
+
+    # 同步模式：暂停 worker，立即执行
+    if mode == "sync" and _queue_worker is not None:
+        result = await _queue_worker.execute_sync(contact_name, message)
+        if isinstance(result, dict) and result.get("ok"):
+            return f"消息已成功发送给 {contact_name}（同步模式）"
+        if isinstance(result, dict):
+            stage = result.get("stage", "unknown")
+            reason = result.get("reason", "unknown")
+            return f"消息发送失败（同步模式）: stage={stage}, reason={reason}"
+        return "消息发送失败（同步模式）: 未知错误"
+
+    # 回退：直接调用控制器（队列不可用时的兼容路径）
     result = await controller.send_text_message(contact_name, message)
 
     if isinstance(result, dict) and result.get("ok"):
         return f"消息已成功发送给 {contact_name}"
 
-    # 构建失败描述
     if isinstance(result, dict):
         stage = result.get("stage", "unknown")
         reason = result.get("reason", "unknown")
@@ -104,7 +142,10 @@ async def send_wechat_message(contact_name: str, message: str) -> str:
 
 @mcp.tool()
 async def schedule_wechat_message(
-    contact_name: str, message: str, delay_seconds: float
+    contact_name: str,
+    message: str,
+    delay_seconds: float,
+    priority: int = 5,
 ) -> str:
     """安排在延迟后发送微信消息。
 
@@ -112,12 +153,124 @@ async def schedule_wechat_message(
         contact_name: 要发送消息的微信联系人或群组名称
         message: 要发送的文本消息内容
         delay_seconds: 发送消息前的延迟秒数
+        priority: 消息优先级，0-10，数值越小优先级越高，默认 5
     """
-    success = await controller.schedule_message(contact_name, message, delay_seconds)
+    global _message_queue
 
+    priority = max(0, min(10, priority))
+
+    # 如果队列可用，使用队列的延迟入队
+    if _message_queue is not None:
+        msg_id = _message_queue.enqueue(
+            contact_name=contact_name,
+            message=message,
+            mode="queue",
+            priority=priority,
+            delay_seconds=delay_seconds,
+        )
+        return (
+            f"消息已安排在 {delay_seconds} 秒后发送给 {contact_name}: "
+            f"id={msg_id}, 优先级={priority}"
+        )
+
+    # 回退：使用旧的 asyncio 方式
+    success = await controller.schedule_message(contact_name, message, delay_seconds)
     if success:
         return f"消息已安排在 {delay_seconds} 秒后发送给 {contact_name}"
     return "消息安排失败"
+
+
+@mcp.tool()
+async def get_queue_status() -> str:
+    """查看消息队列状态概览。"""
+    global _message_queue, _queue_worker
+
+    if _message_queue is None:
+        return "消息队列未初始化"
+
+    stats = _message_queue.get_stats()
+    worker_status = "运行中" if (_queue_worker and _queue_worker.is_running) else "已停止"
+
+    lines = [
+        "=== 消息队列状态 ===",
+        f"Worker 状态: {worker_status}",
+        f"待发送 (pending): {stats['pending']}",
+        f"发送中 (processing): {stats['processing']}",
+        f"已完成 (completed): {stats['completed']}",
+        f"已失败 (failed): {stats['failed']}",
+        f"已取消 (cancelled): {stats['cancelled']}",
+        f"总计: {stats['total']}",
+    ]
+    return "\n".join(lines)
+
+
+@mcp.tool()
+async def get_message_detail(message_id: int) -> str:
+    """查看指定消息的详细信息。
+
+    Args:
+        message_id: 消息 ID
+    """
+    global _message_queue
+
+    if _message_queue is None:
+        return "消息队列未初始化"
+
+    msg = _message_queue.get_message(message_id)
+    if msg is None:
+        return f"消息不存在: id={message_id}"
+
+    lines = [
+        f"=== 消息详情 (ID: {msg['id']}) ===",
+        f"联系人: {msg['contact_name']}",
+        f"消息内容: {msg['message']}",
+        f"状态: {msg['status']}",
+        f"模式: {msg['mode']}",
+        f"优先级: {msg['priority']}",
+        f"重试次数: {msg['retry_count']}/{msg['max_retries']}",
+        f"创建时间: {msg['created_at']}",
+        f"计划时间: {msg['scheduled_at']}",
+        f"更新时间: {msg['updated_at']}",
+    ]
+    if msg.get("error_message"):
+        lines.append(f"错误信息: {msg['error_message']}")
+    return "\n".join(lines)
+
+
+@mcp.tool()
+async def cancel_queue_message(message_id: int) -> str:
+    """取消待发送的消息。
+
+    Args:
+        message_id: 要取消的消息 ID
+    """
+    global _message_queue
+
+    if _message_queue is None:
+        return "消息队列未初始化"
+
+    result = _message_queue.cancel_message(message_id)
+    if result["ok"]:
+        return f"消息已取消: id={message_id}"
+    return f"取消失败: {result['error']}"
+
+
+@mcp.tool()
+async def retry_queue_message(message_id: int) -> str:
+    """重试失败的消息。
+
+    Args:
+        message_id: 要重试的消息 ID
+    """
+    global _message_queue
+
+    if _message_queue is None:
+        return "消息队列未初始化"
+
+    result = _message_queue.retry_message(message_id)
+    if result["ok"]:
+        return f"消息已重新加入队列: id={message_id}"
+    return f"重试失败: {result['error']}"
 
 
 # ==============================================================================
@@ -126,7 +279,10 @@ async def schedule_wechat_message(
 
 
 async def handle_send_message(request: Request) -> JSONResponse:
-    """处理发送消息请求 — POST /api/v1/messages/send"""
+    """处理发送消息请求 — POST /api/v1/messages/send
+
+    支持 mode（queue/sync）和 priority（0-10）参数。
+    """
     try:
         body = await request.json()
     except Exception:
@@ -136,6 +292,8 @@ async def handle_send_message(request: Request) -> JSONResponse:
 
     contact_name = body.get("contact_name")
     message = body.get("message")
+    mode = body.get("mode", "queue")
+    priority = body.get("priority", 5)
 
     if not contact_name:
         return JSONResponse(
@@ -145,8 +303,51 @@ async def handle_send_message(request: Request) -> JSONResponse:
         return JSONResponse(
             {"ok": False, "error": "缺少必填参数: message"}, status_code=400
         )
+    if mode not in ("queue", "sync"):
+        return JSONResponse(
+            {"ok": False, "error": "mode 参数无效，只支持 'queue' 或 'sync'"}, status_code=400
+        )
+    if not isinstance(priority, int) or priority < 0 or priority > 10:
+        return JSONResponse(
+            {"ok": False, "error": "priority 参数无效，需为 0-10 的整数"}, status_code=400
+        )
 
     try:
+        mq: Optional[MessageQueue] = getattr(request.app.state, "message_queue", None)
+        worker: Optional[QueueWorker] = getattr(request.app.state, "queue_worker", None)
+
+        # 队列模式
+        if mode == "queue" and mq is not None:
+            delay_seconds = body.get("delay_seconds", 0.0)
+            msg_id = mq.enqueue(
+                contact_name=contact_name,
+                message=message,
+                mode="queue",
+                priority=priority,
+                delay_seconds=float(delay_seconds),
+            )
+            return JSONResponse({
+                "ok": True,
+                "mode": "queue",
+                "message_id": msg_id,
+                "message": f"消息已加入发送队列: id={msg_id}",
+            })
+
+        # 同步模式
+        if mode == "sync" and worker is not None:
+            result = await worker.execute_sync(contact_name, message)
+            if isinstance(result, dict) and result.get("ok"):
+                return JSONResponse({
+                    "ok": True,
+                    "mode": "sync",
+                    "message": "消息已成功发送（同步模式）",
+                })
+            return JSONResponse(
+                {"ok": False, "mode": "sync", "error": "消息发送失败", "details": result},
+                status_code=500,
+            )
+
+        # 回退：直接调用控制器
         result = await controller.send_text_message(contact_name, message)
         if result.get("ok"):
             return JSONResponse({"ok": True, "message": "Message sent successfully"})
@@ -159,6 +360,104 @@ async def handle_send_message(request: Request) -> JSONResponse:
         return JSONResponse(
             {"ok": False, "error": f"Internal error: {e}"}, status_code=500
         )
+
+
+async def handle_queue_status(request: Request) -> JSONResponse:
+    """队列状态概览 — GET /api/v1/queue/status"""
+    mq: Optional[MessageQueue] = getattr(request.app.state, "message_queue", None)
+    worker: Optional[QueueWorker] = getattr(request.app.state, "queue_worker", None)
+
+    if mq is None:
+        return JSONResponse(
+            {"ok": False, "error": "消息队列未初始化"}, status_code=503
+        )
+
+    stats = mq.get_stats()
+    return JSONResponse({
+        "ok": True,
+        "worker_running": worker.is_running if worker else False,
+        "stats": stats,
+    })
+
+
+async def handle_queue_messages(request: Request) -> JSONResponse:
+    """消息列表 — GET /api/v1/queue/messages"""
+    mq: Optional[MessageQueue] = getattr(request.app.state, "message_queue", None)
+
+    if mq is None:
+        return JSONResponse(
+            {"ok": False, "error": "消息队列未初始化"}, status_code=503
+        )
+
+    status = request.query_params.get("status")
+    limit = int(request.query_params.get("limit", "20"))
+    offset = int(request.query_params.get("offset", "0"))
+
+    # 限制最大分页大小
+    limit = min(limit, 100)
+
+    messages, total = mq.list_messages(status=status, limit=limit, offset=offset)
+    return JSONResponse({
+        "ok": True,
+        "messages": messages,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    })
+
+
+async def handle_queue_message_detail(request: Request) -> JSONResponse:
+    """单条消息详情 — GET /api/v1/queue/messages/{id}"""
+    mq: Optional[MessageQueue] = getattr(request.app.state, "message_queue", None)
+
+    if mq is None:
+        return JSONResponse(
+            {"ok": False, "error": "消息队列未初始化"}, status_code=503
+        )
+
+    message_id = int(request.path_params["id"])
+    msg = mq.get_message(message_id)
+
+    if msg is None:
+        return JSONResponse(
+            {"ok": False, "error": f"消息不存在: id={message_id}"}, status_code=404
+        )
+
+    return JSONResponse({"ok": True, "message": msg})
+
+
+async def handle_queue_cancel(request: Request) -> JSONResponse:
+    """取消消息 — POST /api/v1/queue/messages/{id}/cancel"""
+    mq: Optional[MessageQueue] = getattr(request.app.state, "message_queue", None)
+
+    if mq is None:
+        return JSONResponse(
+            {"ok": False, "error": "消息队列未初始化"}, status_code=503
+        )
+
+    message_id = int(request.path_params["id"])
+    result = mq.cancel_message(message_id)
+
+    if result["ok"]:
+        return JSONResponse({"ok": True, "message": f"消息已取消: id={message_id}"})
+    return JSONResponse({"ok": False, "error": result["error"]}, status_code=400)
+
+
+async def handle_queue_retry(request: Request) -> JSONResponse:
+    """重试消息 — POST /api/v1/queue/messages/{id}/retry"""
+    mq: Optional[MessageQueue] = getattr(request.app.state, "message_queue", None)
+
+    if mq is None:
+        return JSONResponse(
+            {"ok": False, "error": "消息队列未初始化"}, status_code=503
+        )
+
+    message_id = int(request.path_params["id"])
+    result = mq.retry_message(message_id)
+
+    if result["ok"]:
+        return JSONResponse({"ok": True, "message": f"消息已重新加入队列: id={message_id}"})
+    return JSONResponse({"ok": False, "error": result["error"]}, status_code=400)
 
 
 async def handle_status(request: Request) -> JSONResponse:
@@ -251,6 +550,15 @@ async def handle_test_page(request: Request) -> FileResponse:
     return JSONResponse({"error": "test.html not found"}, status_code=404)
 
 
+async def handle_queue_page(request: Request) -> FileResponse:
+    """队列管理页面 — GET /queue"""
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    queue_path = os.path.join(base_dir, "static", "queue.html")
+    if os.path.isfile(queue_path):
+        return FileResponse(queue_path, media_type="text/html")
+    return JSONResponse({"error": "queue.html not found"}, status_code=404)
+
+
 # ==============================================================================
 # 统一 Starlette 应用（HTTP API + MCP Streamable HTTP）
 # ==============================================================================
@@ -262,8 +570,9 @@ def create_starlette_app() -> Starlette:
     包含：
     - MCP Streamable HTTP 端点 (/mcp)
     - HTTP API 端点 (/api/v1/*)
+    - 队列管理 API (/api/v1/queue/*)
     - 静态文件服务 (/static/*)
-    - 根路径和测试页面
+    - 根路径、测试页面和队列管理页面
     """
     # 获取 MCP 的 streamable HTTP ASGI 子应用
     mcp_app = mcp.streamable_http_app()
@@ -281,14 +590,22 @@ def create_starlette_app() -> Starlette:
     routes = [
         # MCP Streamable HTTP 端点 — 直接注册避免 Mount 的尾斜杠重定向
         Route("/mcp", endpoint=mcp_endpoint),
-        # HTTP API 端点
+        # HTTP API 端点 — 消息发送
         Route("/api/v1/messages/send", handle_send_message, methods=["POST"]),
+        # HTTP API 端点 — 队列管理
+        Route("/api/v1/queue/status", handle_queue_status, methods=["GET"]),
+        Route("/api/v1/queue/messages", handle_queue_messages, methods=["GET"]),
+        Route("/api/v1/queue/messages/{id:int}", handle_queue_message_detail, methods=["GET"]),
+        Route("/api/v1/queue/messages/{id:int}/cancel", handle_queue_cancel, methods=["POST"]),
+        Route("/api/v1/queue/messages/{id:int}/retry", handle_queue_retry, methods=["POST"]),
+        # HTTP API 端点 — 状态与配置
         Route("/api/v1/status", handle_status, methods=["GET"]),
         Route("/api/v1/anti-ban/stats", handle_anti_ban_stats, methods=["GET"]),
         Route("/api/v1/anti-ban/config", handle_anti_ban_config, methods=["GET"]),
         # 页面路由
         Route("/", handle_index, methods=["GET"]),
         Route("/test", handle_test_page, methods=["GET"]),
+        Route("/queue", handle_queue_page, methods=["GET"]),
     ]
 
     # 静态文件服务（如果目录存在）
@@ -297,10 +614,46 @@ def create_starlette_app() -> Starlette:
 
     @asynccontextmanager
     async def lifespan(app: Starlette):
-        """管理 MCP session_manager 的生命周期。"""
+        """管理 MCP session_manager 和消息队列 Worker 的生命周期。"""
+        global _message_queue, _queue_worker
+
         async with mcp.session_manager.run():
             logger.info("MCP session manager 已启动")
+
+            # 初始化消息队列
+            message_queue = MessageQueue(
+                db_path=config.queue_db_path,
+                max_retries=config.queue_max_retries,
+            )
+            recovered = message_queue.recover()
+            if recovered > 0:
+                logger.info(f"已恢复 {recovered} 条中断的消息")
+
+            # 启动 worker
+            worker = QueueWorker(
+                queue=message_queue,
+                controller=controller,
+                poll_interval=config.queue_poll_interval,
+            )
+            await worker.start()
+
+            # 挂到 app.state 供路由处理函数访问
+            app.state.message_queue = message_queue
+            app.state.queue_worker = worker
+
+            # 同步更新全局引用，供 MCP 工具访问
+            _message_queue = message_queue
+            _queue_worker = worker
+
+            logger.info("消息队列和 Worker 已启动")
             yield
+
+            # 清理
+            await worker.stop()
+            _message_queue = None
+            _queue_worker = None
+            logger.info("消息队列 Worker 已停止")
+
         logger.info("MCP session manager 已关闭")
 
     # CORS 中间件
@@ -365,9 +718,11 @@ def main():
 
         logger.info(f"以 streamable-http 模式启动统一服务器: http://{host}:{port}")
         logger.info("可用端点:")
-        logger.info(f"  MCP:  http://{host}:{port}/mcp")
-        logger.info(f"  API:  http://{host}:{port}/api/v1/...")
-        logger.info(f"  Web:  http://{host}:{port}/")
+        logger.info(f"  MCP:    http://{host}:{port}/mcp")
+        logger.info(f"  API:    http://{host}:{port}/api/v1/...")
+        logger.info(f"  Queue:  http://{host}:{port}/api/v1/queue/...")
+        logger.info(f"  Web:    http://{host}:{port}/")
+        logger.info(f"  队列管理: http://{host}:{port}/queue")
 
         app = create_starlette_app()
         uvicorn.run(app, host=host, port=port, log_level="info")

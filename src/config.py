@@ -40,6 +40,10 @@ DEFAULTS: Dict[str, Any] = {
     "gui_move_duration_max": 0.3,
     "gui_pause_min": 0.05,
     "gui_pause_max": 0.15,
+    # 消息队列配置
+    "queue_db_path": "data/messages.db",
+    "queue_max_retries": 3,
+    "queue_poll_interval": 1.0,
 }
 
 # 配置文件默认路径（项目根目录下）
@@ -141,6 +145,21 @@ class Config:
     def wechat_hotkey(self) -> str:
         """激活微信窗口的快捷键，格式如 'ctrl+alt+w'。"""
         return str(self._data.get("wechat_hotkey", DEFAULTS["wechat_hotkey"]))
+
+    @property
+    def queue_db_path(self) -> str:
+        """消息队列 SQLite 数据库文件路径。"""
+        return str(self._data.get("queue_db_path", DEFAULTS["queue_db_path"]))
+
+    @property
+    def queue_max_retries(self) -> int:
+        """消息发送失败后最大重试次数。"""
+        return int(self._data.get("queue_max_retries", DEFAULTS["queue_max_retries"]))
+
+    @property
+    def queue_poll_interval(self) -> float:
+        """队列 Worker 轮询间隔（秒）。"""
+        return float(self._data.get("queue_poll_interval", DEFAULTS["queue_poll_interval"]))
 
 
     # ------------------------------------------------------------------
