@@ -1,0 +1,38 @@
+{
+  "//": "=== 激进模式配置（最高效率） ===",
+  "//": "适用场景：低价值小号、短期测试",
+  "//": "风险等级：🔴 高",
+  "//": "每日回复上限：约 200 次",
+  "//": "警告：使用此模式账号被封风险显著提高！",
+
+  "http_port": 8080,
+
+  "//": "=== 速率限制配置 ===",
+  "rate_limit_per_minute": 5,
+  "rate_limit_per_hour": 40,
+  "rate_limit_per_day": 200,
+
+  "//": "=== 人类行为模拟 ===",
+  "min_think_time": 1.0,
+  "max_think_time": 4.0,
+  "min_random_delay": 0.2,
+  "max_random_delay": 1.0,
+
+  "//": "=== 工作时间控制 ===",
+  "work_hours_start": 0,
+  "work_hours_end": 23,
+  "work_days": [0, 1, 2, 3, 4, 5, 6],
+  "max_daily_runtime_hours": 24.0,
+
+  "//": "=== 内容多样化 ===",
+  "prefix_probability": 0.1,
+  "suffix_probability": 0.05,
+  "random_skip_probability": 0.05,
+
+  "//": "=== GUI 操作参数 ===",
+  "gui_offset_range": 3,
+  "gui_move_duration_min": 0.1,
+  "gui_move_duration_max": 0.4,
+  "gui_pause_min": 0.05,
+  "gui_pause_max": 0.15
+}

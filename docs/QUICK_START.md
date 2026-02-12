@@ -28,7 +28,7 @@
 
 4. **（推荐）配置微信快捷键**
    - 打开微信「设置 → 快捷键」
-   - 设置「打开微信」快捷键为 `Ctrl+Alt+W`（与 `config.json` 中 `wechat_hotkey` 一致）
+   - 设置「打开微信」快捷键为 `Ctrl+Alt+W`（与 `data/config.json` 中 `wechat_hotkey` 一致）
    - 配置后系统会优先通过快捷键激活微信窗口，未配置时自动回退到 Win32 API 方式
 
 ---
@@ -51,9 +51,13 @@ python mcp_client_example.py
 正在以 stdio 模式启动 MCP 服务器...
 已连接到服务器: wechat-mcp-server v2.0.0
 协议版本: 2024-11-05
-可用工具 (2 个):
+可用工具 (6 个):
   - send_wechat_message: 向微信联系人或群组发送文本消息。
   - schedule_wechat_message: 安排在延迟后发送微信消息。
+  - get_queue_status: 查看消息队列状态概览。
+  - get_message_detail: 查看指定消息的详细信息。
+  - cancel_queue_message: 取消待发送的消息。
+  - retry_queue_message: 重试失败的消息。
 ```
 
 ### 步骤2: 配置 AI 助手
@@ -110,11 +114,14 @@ streamable-http 模式在同一个端口上同时提供 MCP 端点和 HTTP API�
 
 ### 步骤1: 配置服务器
 
-编辑项目根目录的 `config.json`（首次运行会自动创建）：
+编辑 `data/config.json`（首次运行会自动创建）：
 
 ```json
 {
   "http_port": 8765,
+  "queue_db_path": "data/messages.db",
+  "queue_max_retries": 3,
+  "queue_poll_interval": 1.0,
   "rate_limit_per_minute": 10,
   "rate_limit_per_hour": 20,
   "rate_limit_per_day": 100,
@@ -135,7 +142,7 @@ python src/mcp_server.py --transport streamable-http
 
 可选参数：
 ```bash
-# 指定端口（默认读取 config.json 中的 http_port）
+# 指定端口（默认读取 data/config.json 中的 http_port）
 python src/mcp_server.py --transport streamable-http --port 8765
 
 # 指定监听地址
@@ -146,9 +153,10 @@ python src/mcp_server.py --transport streamable-http --host 127.0.0.1
 ```
 以 streamable-http 模式启动统一服务器: http://0.0.0.0:8765
 可用端点:
-  MCP:  http://0.0.0.0:8765/mcp
-  API:  http://0.0.0.0:8765/api/v1/...
-  Web:  http://0.0.0.0:8765/
+  MCP:   http://0.0.0.0:8765/mcp
+  API:   http://0.0.0.0:8765/api/v1/...
+  Queue: http://0.0.0.0:8765/queue
+  Web:   http://0.0.0.0:8765/
 ```
 
 ### 步骤3: 测试
@@ -161,9 +169,15 @@ python src/mcp_server.py --transport streamable-http --host 127.0.0.1
 
 2. **通过 HTTP API 发送消息**
    ```bash
+   # 队列模式（默认，异步入队）
    curl -X POST http://localhost:8765/api/v1/messages/send \
      -H "Content-Type: application/json" \
      -d '{"contact_name": "文件传输助手", "message": "Hello from HTTP API!"}'
+
+   # 同步模式（立即发送）
+   curl -X POST http://localhost:8765/api/v1/messages/send \
+     -H "Content-Type: application/json" \
+     -d '{"contact_name": "文件传输助手", "message": "紧急消息", "mode": "sync"}'
    ```
 
 3. **查询状态**
@@ -176,17 +190,32 @@ python src/mcp_server.py --transport streamable-http --host 127.0.0.1
    curl http://localhost:8765/api/v1/anti-ban/stats
    ```
 
+5. **查询队列状态**
+   ```bash
+   curl http://localhost:8765/api/v1/queue/status
+   ```
+
+6. **打开队列管理页面**
+
+   在浏览器中访问 `http://localhost:8765/queue`
+
 ### 可用端点一览
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
 | `/mcp` | POST | MCP Streamable HTTP 端点 |
-| `/api/v1/messages/send` | POST | 发送消息 |
+| `/api/v1/messages/send` | POST | 发送消息（支持 queue/sync 模式） |
 | `/api/v1/status` | GET | 查询微信状态 |
+| `/api/v1/queue/status` | GET | 队列状态概览 |
+| `/api/v1/queue/messages` | GET | 队列消息列表（支持 status/limit/offset 查询） |
+| `/api/v1/queue/messages/{id}` | GET | 消息详情 |
+| `/api/v1/queue/messages/{id}/cancel` | POST | 取消待发送消息 |
+| `/api/v1/queue/messages/{id}/retry` | POST | 重试失败消息 |
 | `/api/v1/anti-ban/stats` | GET | 防封号统计 |
 | `/api/v1/anti-ban/config` | GET | 防封号配置 |
 | `/` | GET | Web 首页 |
 | `/test` | GET | 测试页面 |
+| `/queue` | GET | 队列管理页面 |
 | `/static/*` | GET | 静态文件 |
 
 ---
@@ -212,7 +241,7 @@ python src/mcp_server.py --transport streamable-http --host 127.0.0.1
 ## 高级配置
 
 ### 自定义快捷键
-在 `config.json` 中配置微信激活快捷键：
+在 `data/config.json` 中配置微信激活快捷键：
 ```json
 {
   "wechat_hotkey": "ctrl+alt+w"

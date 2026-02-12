@@ -14,7 +14,7 @@
 
 ### 快速配置
 
-所有防封号功能通过 `config.json` 集中配置，无需修改代码：
+所有防封号功能通过 `data/config.json` 集中配置，无需修改代码：
 
 ```json
 {
@@ -206,7 +206,7 @@ def send_text_message(self, contact_name: str, message: str):
 
 #### 2. 随机化操作时间
 
-修改 `config.json` 配置：
+修改 `data/config.json` 配置：
 
 ```json
 {
@@ -596,7 +596,7 @@ def paste_text_safe(text: str):
 
 ### 极度保守配置（推荐新账号）
 
-`config.json`:
+`data/config.json`:
 ```json
 {
   "http_port": 8080,

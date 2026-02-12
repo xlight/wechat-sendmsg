@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 配置管理模块
-从 config.json 加载配置，缺失项使用默认值，配置文件不存在时创建模板。
+从 data/config.json 加载配置，缺失项使用默认值，配置文件不存在时创建模板。
 """
 
 import json
@@ -46,8 +46,8 @@ DEFAULTS: Dict[str, Any] = {
     "queue_poll_interval": 1.0,
 }
 
-# 配置文件默认路径（项目根目录下）
-_CONFIG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
+# 配置文件默认路径（项目根目录下的 data/ 子目录）
+_CONFIG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "config.json")
 
 
 class Config:
@@ -201,8 +201,9 @@ class Config:
             logger.error(f"加载配置文件失败: {e}，将使用默认值")
 
     def _create_template(self) -> None:
-        """创建包含默认值的 config.json 模板文件。"""
+        """创建包含默认值的 data/config.json 模板文件。"""
         try:
+            os.makedirs(os.path.dirname(self._path), exist_ok=True)
             with open(self._path, "w", encoding="utf-8") as f:
                 json.dump(DEFAULTS, f, ensure_ascii=False, indent=2)
             logger.info(f"已创建配置模板: {self._path}")

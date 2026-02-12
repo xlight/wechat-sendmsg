@@ -1,0 +1,47 @@
+{
+  "//": "=== 中等模式配置（平衡配置） ===",
+  "//": "适用场景：已养成的测试账号",
+  "//": "风险等级：🟡 中等",
+  "//": "每日回复上限：约 100 次",
+  
+  "http_port": 8080,
+  "poll_interval": 30,
+  "monitored_groups": [],
+  "bot_name": "",
+  
+  "ai_base_url": "",
+  "ai_api_key": "",
+  "ai_model": "gpt-3.5-turbo",
+  "system_prompt": "",
+  "max_reply_chars": 1000,
+  "ai_timeout": 30,
+  
+  "//": "=== 速率限制配置 ===",
+  "rate_limit_per_minute": 3,
+  "rate_limit_per_hour": 20,
+  "rate_limit_per_day": 100,
+  
+  "//": "=== 人类行为模拟 ===",
+  "min_think_time": 3.0,
+  "max_think_time": 8.0,
+  "min_random_delay": 0.5,
+  "max_random_delay": 2.0,
+  
+  "//": "=== 工作时间控制 ===",
+  "work_hours_start": 9,
+  "work_hours_end": 18,
+  "work_days": [0, 1, 2, 3, 4],
+  "max_daily_runtime_hours": 8.0,
+  
+  "//": "=== 内容多样化 ===",
+  "prefix_probability": 0.3,
+  "suffix_probability": 0.2,
+  "random_skip_probability": 0.1,
+  
+  "//": "=== GUI 操作参数 ===",
+  "gui_offset_range": 5,
+  "gui_move_duration_min": 0.3,
+  "gui_move_duration_max": 0.8,
+  "gui_pause_min": 0.1,
+  "gui_pause_max": 0.3
+}

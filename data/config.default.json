@@ -1,0 +1,28 @@
+{
+  "http_port": 8080,
+  "rate_limit_per_minute": 10,
+  "rate_limit_per_hour": 20,
+  "rate_limit_per_day": 100,
+  "min_think_time": 3.0,
+  "max_think_time": 15.0,
+  "min_random_delay": 1.0,
+  "max_random_delay": 3.0,
+  "work_hours_start": 9,
+  "work_hours_end": 22,
+  "work_days": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "max_daily_runtime_hours": 8.0,
+  "prefix_probability": 0.1,
+  "suffix_probability": 0.05,
+  "random_skip_probability": 0.2,
+  "gui_offset_range": 3,
+  "gui_move_duration_min": 0.1,
+  "gui_move_duration_max": 0.3,
+  "gui_pause_min": 0.05,
+  "gui_pause_max": 0.15
+}

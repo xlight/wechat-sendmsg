@@ -20,6 +20,7 @@
 
 **主要功能模块:**
 - MCP 服务器 + HTTP API (src/mcp_server.py) — FastMCP + Starlette 统一应用
+- 消息队列 + 后台 Worker (src/message_queue.py) — SQLite 持久化，优先级，重试，崩溃恢复
 - 微信控制器 (src/wechat_controller.py) - 主入口，组合 Mixin
   - 窗口查找 Mixin (src/window_finder.py)
   - 系统托盘管理 Mixin (src/tray_manager.py)
@@ -39,6 +40,7 @@ chatwe-automate/
 │   ├── tray_manager.py           # TrayManagerMixin: 系统托盘图标查找与双击恢复
 │   ├── gui_operations.py         # GUIOperationsMixin: 输入框定位、剪贴板输入、搜索联系人、发送
 │   ├── config.py                 # 配置管理模块
+│   ├── message_queue.py          # MessageQueue + QueueWorker: SQLite 持久化消息队列与后台消费 Worker
 │   └── anti_ban/                 # 防封号保护系统
 ├── examples/
 │   └── mcp_client_example.py     # MCP 客户端示例（支持 stdio / streamable-http）
@@ -50,12 +52,17 @@ chatwe-automate/
 │   └── WINDOW_DETECTION_FIXES.md     # 窗口检测修复说明
 ├── static/
 │   ├── index.html                # Web 首页
-│   └── test.html                 # 测试页面
+│   ├── test.html                 # 测试页面
+│   └── queue.html                # 队列管理页面
 ├── openspec/                     # OpenSpec 规范目录
 │   ├── specs/                    # 主规范
 │   └── changes/                  # 变更记录
-├── config.json                   # 配置文件（运行时自动生成）
-├── mcp_config.json               # MCP 配置文件
+├── data/
+│   ├── config.json                   # 配置文件（运行时自动生成）
+│   ├── config.conservative.json      # 保守模式配置模板
+│   ├── config.moderate.json          # 中等模式配置模板
+│   ├── config.aggressive.json        # 激进模式配置模板
+│   └── messages.db                   # 消息队列数据库（运行时自动生成）
 ├── test_server.py                # MCP 服务器测试脚本
 ├── test_send_chinese.py          # 中文发送测试
 ├── requirements.txt              # Python 依赖
@@ -364,7 +371,7 @@ async with gui_lock:
 ```python
 from config import Config, DEFAULTS
 
-config = Config()  # 加载 config.json，不存在则创建模板
+config = Config()  # 加载 data/config.json，不存在则创建模板
 port = config.http_port  # 通过属性访问
 config.update({"poll_interval": 10})  # 运行时更新
 dict_data = config.to_dict(mask_secrets=True)  # 序列化（脱敏）

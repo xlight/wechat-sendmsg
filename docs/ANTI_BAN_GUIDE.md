@@ -341,18 +341,18 @@ success = gui.safe_paste_text(text)
 
 ```bash
 # 1. 保守模式（新账号/高价值账号）
-cp config.conservative.json config.json
+cp data/config.conservative.json data/config.json
 
 # 2. 中等模式（已养成的测试账号）- 推荐
-cp config.moderate.json config.json
+cp data/config.moderate.json data/config.json
 
 # 3. 激进模式（临时测试小号）
-cp config.aggressive.json config.json
+cp data/config.aggressive.json data/config.json
 ```
 
 ### 方式二：手动配置
 
-编辑 `config.json`，添加防封号配置项：
+编辑 `data/config.json`，添加防封号配置项：
 
 ```json
 {
@@ -694,7 +694,7 @@ done
 **排查步骤**：
 1. 检查配置文件是否包含防封号配置项
    ```bash
-   grep "rate_limit_per_minute" config.json
+   grep "rate_limit_per_minute" data/config.json
    ```
 
 2. 检查模块是否正确导入

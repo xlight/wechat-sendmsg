@@ -54,6 +54,10 @@
 - ✅ **双传输模式** - 支持 stdio 和 Streamable HTTP 两种 MCP 传输模式
 - ✅ **HTTP API** - 提供 RESTful API 接口，与 MCP 端点共享同一端口（Starlette 统一应用）
 - ✅ **微信消息发送** - 支持发送文本消息到微信联系人或群聊
+- ✅ **本地持久化消息队列** - SQLite 驱动的消息队列，支持优先级（0-10）、定时发送、自动重试、崩溃恢复
+  - **双发送模式**: 队列模式（异步入队，后台 worker 消费）和同步模式（暂停队列，立即执行）
+  - **队列管理**: 通过 MCP 工具和 HTTP API 查看状态、取消待发送、重试失败消息
+  - **Web 管理界面**: `/queue` 页面可视化管理队列（筛选、分页、自动刷新）
 - ✅ **定时发送** - 支持延迟发送消息功能
 - ✅ **NT 框架支持** - 完全支持微信 4.0 以上的 NT 框架版本
 - ✅ **智能版本检测** - 自动检测微信版本并适配相应的操作方式
@@ -93,6 +97,7 @@ WeChat-MCP-Server/
 │   ├── 📄 tray_manager.py           # 系统托盘管理 Mixin
 │   ├── 📄 gui_operations.py         # GUI 操作（输入、搜索、发送）Mixin
 │   ├── 📄 config.py                 # 配置管理模块
+│   ├── 📄 message_queue.py          # 消息队列 + 后台 Worker（SQLite 持久化）
 │   └── 📂 anti_ban/                 # 防封号保护系统
 │       ├── 📄 __init__.py           # 防封号包初始化
 │       ├── 📄 enhanced_rate_limiter.py    # 增强版速率限制器
@@ -107,12 +112,17 @@ WeChat-MCP-Server/
 │   └── 📄 AVOID_BAN.md              # 防封号指南
 ├── 📂 static/
 │   ├── 📄 index.html                # Web 首页
-│   └── 📄 test.html                 # 测试页面
+│   ├── 📄 test.html                 # 测试页面
+│   └── 📄 queue.html                # 队列管理页面
 ├── 📂 支持我们/
 │   ├── 🖼️ 1.jpg                     # 支付宝收款码
 │   └── 🖼️ 2.jpg                     # 微信赞赏码
-├── 📄 config.json                   # 配置文件（运行时自动生成）
-├── 📄 mcp_config.json               # MCP配置文件
+├── 📂 data/
+│   ├── 📄 config.json                # 配置文件（运行时自动生成）
+│   ├── 📄 config.conservative.json   # 保守模式配置模板
+│   ├── 📄 config.moderate.json       # 中等模式配置模板
+│   ├── 📄 config.aggressive.json     # 激进模式配置模板
+│   └── 📄 messages.db               # 消息队列数据库（运行时自动生成）
 ├── 📄 requirements.txt              # 依赖包列表
 ├── 📄 LICENSE                       # 许可证文件
 └── 📄 README.md                     # 项目说明文档
@@ -165,7 +175,7 @@ pip install -r requirements.txt
 
 ### 📤 send_wechat_message
 
-发送文本消息到指定的微信联系人或群组。
+发送文本消息到指定的微信联系人或群组。支持队列模式（异步入队）和同步模式（立即执行）。
 
 **参数：**
 
@@ -173,6 +183,8 @@ pip install -r requirements.txt
 |--------|------|------|------|
 | `contact_name` | `string` | ✅ | 联系人或群组名称 |
 | `message` | `string` | ✅ | 要发送的文本消息 |
+| `mode` | `string` | ❌ | 发送模式：`"queue"`（默认，异步入队）或 `"sync"`（同步立即发送） |
+| `priority` | `integer` | ❌ | 优先级 0-10，数值越小越优先，默认 5 |
 
 **示例：**
 ```json
@@ -180,7 +192,9 @@ pip install -r requirements.txt
   "name": "send_wechat_message",
   "arguments": {
     "contact_name": "文件传输助手",
-    "message": "Hello from AI assistant!"
+    "message": "Hello from AI assistant!",
+    "mode": "queue",
+    "priority": 3
   }
 }
 ```
@@ -196,6 +210,7 @@ pip install -r requirements.txt
 | `contact_name` | `string` | ✅ | 联系人或群组名称 |
 | `message` | `string` | ✅ | 要发送的文本消息 |
 | `delay_seconds` | `number` | ✅ | 延迟发送的秒数 |
+| `priority` | `integer` | ❌ | 优先级 0-10，数值越小越优先，默认 5 |
 
 **示例：**
 ```json
@@ -204,7 +219,82 @@ pip install -r requirements.txt
   "arguments": {
     "contact_name": "文件传输助手",
     "message": "This is a scheduled message!",
-    "delay_seconds": 30
+    "delay_seconds": 30,
+    "priority": 5
+  }
+}
+```
+
+### 📊 get_queue_status
+
+查看消息队列状态概览，包含各状态消息计数和 worker 运行状态。
+
+**参数：** 无
+
+**示例：**
+```json
+{
+  "name": "get_queue_status",
+  "arguments": {}
+}
+```
+
+### 🔍 get_message_detail
+
+查看指定消息的详细信息。
+
+**参数：**
+
+| 参数名 | 类型 | 必填 | 描述 |
+|--------|------|------|------|
+| `message_id` | `integer` | ✅ | 消息 ID |
+
+**示例：**
+```json
+{
+  "name": "get_message_detail",
+  "arguments": {
+    "message_id": 42
+  }
+}
+```
+
+### ❌ cancel_queue_message
+
+取消一条待发送（pending）的消息。
+
+**参数：**
+
+| 参数名 | 类型 | 必填 | 描述 |
+|--------|------|------|------|
+| `message_id` | `integer` | ✅ | 消息 ID |
+
+**示例：**
+```json
+{
+  "name": "cancel_queue_message",
+  "arguments": {
+    "message_id": 42
+  }
+}
+```
+
+### 🔄 retry_queue_message
+
+重试一条失败（failed）的消息，将其状态重置为 pending，retry_count 清零。
+
+**参数：**
+
+| 参数名 | 类型 | 必填 | 描述 |
+|--------|------|------|------|
+| `message_id` | `integer` | ✅ | 消息 ID |
+
+**示例：**
+```json
+{
+  "name": "retry_queue_message",
+  "arguments": {
+    "message_id": 42
   }
 }
 ```
@@ -254,15 +344,18 @@ python src/mcp_server.py
 streamable-http 模式下可用的端点：
 - **MCP 端点**: `http://localhost:8765/mcp` — Streamable HTTP MCP 协议
 - **HTTP API**: `http://localhost:8765/api/v1/...` — RESTful API
-- **Web 页面**: `http://localhost:8765/` — 首页 / `http://localhost:8765/test` — 测试页面
+- **Web 页面**: `http://localhost:8765/` — 首页 / `http://localhost:8765/test` — 测试页面 / `http://localhost:8765/queue` — 队列管理
 
 ### 配置文件
 
-首次运行时会在项目根目录自动创建 `config.json` 模板文件。主要配置项：
+首次运行时会在 `data/` 目录自动创建 `config.json` 模板文件。主要配置项：
 
 ```json
 {
   "http_port": 8080,
+  "queue_db_path": "data/messages.db",
+  "queue_max_retries": 3,
+  "queue_poll_interval": 1.0,
   "rate_limit_per_minute": 10,
   "rate_limit_per_hour": 20,
   "rate_limit_per_day": 100,
@@ -276,6 +369,11 @@ streamable-http 模式下可用的端点：
 }
 ```
 
+> **队列配置说明:**
+> - **`queue_db_path`** — SQLite 数据库文件路径，默认 `data/messages.db`，首次启动自动创建
+> - **`queue_max_retries`** — 消息发送失败后最大重试次数，默认 3；设为 0 禁用重试
+> - **`queue_poll_interval`** — 队列 worker 轮询间隔（秒），默认 1.0
+>
 > **`wechat_hotkey`** — 用于激活微信窗口的全局快捷键，需在微信「设置 → 快捷键」中配置相同的组合键。快捷键激活失败时会自动回退到 Win32 API 方式。
 
 详细的防封号配置说明请参考 [docs/AVOID_BAN.md](docs/AVOID_BAN.md)。
@@ -290,15 +388,35 @@ Content-Type: application/json
 
 {
   "contact_name": "文件传输助手",
-  "message": "Hello from HTTP API!"
+  "message": "Hello from HTTP API!",
+  "mode": "queue",
+  "priority": 5
 }
 ```
 
-**成功响应 (200):**
+**参数说明：**
+| 参数名 | 类型 | 必填 | 描述 |
+|--------|------|------|------|
+| `contact_name` | `string` | ✅ | 联系人或群组名称 |
+| `message` | `string` | ✅ | 消息内容 |
+| `mode` | `string` | ❌ | `"queue"`（默认，异步入队）或 `"sync"`（同步立即发送） |
+| `priority` | `integer` | ❌ | 优先级 0-10，默认 5，数值越小越优先 |
+| `delay_seconds` | `number` | ❌ | 延迟发送秒数（仅队列模式有效） |
+
+**队列模式响应 (200):**
 ```json
 {
   "ok": true,
-  "message": "Message sent successfully"
+  "message_id": 123,
+  "mode": "queue"
+}
+```
+
+**同步模式响应 (200):**
+```json
+{
+  "ok": true,
+  "mode": "sync"
 }
 ```
 
@@ -362,6 +480,87 @@ GET /api/v1/anti-ban/config
 
 返回当前防封号相关配置的详细信息。
 
+#### 队列状态概览
+
+```
+GET /api/v1/queue/status
+```
+
+**响应 (200):**
+```json
+{
+  "ok": true,
+  "stats": {
+    "pending": 5,
+    "processing": 1,
+    "completed": 42,
+    "failed": 2,
+    "cancelled": 0
+  },
+  "worker_running": true
+}
+```
+
+#### 队列消息列表
+
+```
+GET /api/v1/queue/messages?status=pending&limit=20&offset=0
+```
+
+**查询参数：**
+| 参数名 | 类型 | 描述 |
+|--------|------|------|
+| `status` | `string` | 按状态筛选：pending/processing/completed/failed/cancelled |
+| `limit` | `integer` | 每页数量，默认 20 |
+| `offset` | `integer` | 偏移量，默认 0 |
+
+**响应 (200):**
+```json
+{
+  "ok": true,
+  "messages": [...],
+  "total": 50
+}
+```
+
+#### 消息详情
+
+```
+GET /api/v1/queue/messages/{id}
+```
+
+返回指定 ID 的消息完整信息。
+
+#### 取消消息
+
+```
+POST /api/v1/queue/messages/{id}/cancel
+```
+
+仅允许取消 status=pending 的消息。
+
+**响应 (200):**
+```json
+{
+  "ok": true
+}
+```
+
+#### 重试消息
+
+```
+POST /api/v1/queue/messages/{id}/retry
+```
+
+仅允许重试 status=failed 的消息，将其重置为 pending，retry_count 清零。
+
+**响应 (200):**
+```json
+{
+  "ok": true
+}
+```
+
 ## 🔄 自动化任务与消息报备
 
 ### 🚀 使用Cloud Code自动化工作流
@@ -396,7 +595,9 @@ def send_deployment_notification(status, details):
     """通过 HTTP API 发送部署通知到微信群"""
     payload = {
         "contact_name": "技术团队群",
-        "message": f"部署状态: {status}\n详情: {details}"
+        "message": f"部署状态: {status}\n详情: {details}",
+        "mode": "queue",
+        "priority": 1
     }
     
     response = requests.post(
@@ -584,6 +785,7 @@ SDK 自动处理的协议功能：
 - [x] ~~输入法兼容性问题~~ ✅ **已完成**
 - [x] ~~HTTP RESTful API~~ ✅ **已完成**
 - [x] ~~防封号保护系统~~ ✅ **已完成**
+- [x] ~~本地持久化消息队列~~ ✅ **已完成**
 - [ ] 支持macOS和Linux系统
 - [ ] 增加更多微信操作功能（如图片、视频等）
 
