@@ -20,7 +20,10 @@
 
 **主要功能模块:**
 - MCP 服务器 (src/mcp_server.py)
-- 微信控制器 (src/wechat_controller.py)
+- 微信控制器 (src/wechat_controller.py) - 主入口，组合 Mixin
+  - 窗口查找 Mixin (src/window_finder.py)
+  - 系统托盘管理 Mixin (src/tray_manager.py)
+  - GUI 操作 Mixin (src/gui_operations.py)
 - HTTP API 服务器 (src/http_server.py)
 - 配置管理 (src/config.py)
 - 防封号保护系统 (src/anti_ban/)
@@ -32,7 +35,10 @@ chatwe-automate/
 ├── src/
 │   ├── __init__.py               # 包初始化
 │   ├── mcp_server.py             # MCP 服务器核心实现
-│   ├── wechat_controller.py      # 微信自动化控制器
+│   ├── wechat_controller.py      # 微信自动化控制器（主入口，组合 Mixin）
+│   ├── window_finder.py          # WindowFinderMixin: 版本检测、窗口查找、窗口激活
+│   ├── tray_manager.py           # TrayManagerMixin: 系统托盘图标查找与双击恢复
+│   ├── gui_operations.py         # GUIOperationsMixin: 输入框定位、剪贴板输入、搜索联系人、发送
 │   ├── http_server.py            # HTTP API 服务器
 │   ├── config.py                 # 配置管理模块
 │   └── anti_ban/                 # 防封号保护系统
@@ -40,7 +46,10 @@ chatwe-automate/
 │   └── mcp_client_example.py     # MCP 客户端示例
 ├── docs/
 │   ├── QUICK_START.md            # 快速开始指南
-│   └── AVOID_BAN.md              # 防封号指南
+│   ├── AVOID_BAN.md              # 防封号指南
+│   ├── ANTI_BAN_GUIDE.md         # 防封号保护系统详细指南
+│   ├── TRAY_RECOVERY_IMPROVEMENT.md  # 托盘恢复机制说明
+│   └── WINDOW_DETECTION_FIXES.md     # 窗口检测修复说明
 ├── openspec/                     # OpenSpec 规范目录
 │   ├── specs/                    # 主规范
 │   └── changes/                  # 变更记录
@@ -385,7 +394,7 @@ dict_data = config.to_dict(mask_secrets=True)  # 序列化（脱敏）
 1. **Windows 专用**: 此项目仅支持 Windows 系统
 2. **微信版本**: 完全支持微信 4.0+ (NT 框架)，传统版本兼容性有限
 3. **运行要求**: 微信必须在运行并已登录
-4. **窗口要求**: 微信窗口必须可见（不能最小化）
+4. **窗口要求**: 微信窗口必须可见或最小化到托盘（支持自动恢复）
 5. **并发安全**: GUI 操作必须使用 `gui_lock` 保护
 6. **异步优先**: 所有 I/O 操作使用 async/await
 

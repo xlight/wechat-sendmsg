@@ -186,7 +186,7 @@ A: 观察日志中的 "模拟思考时间"、"随机跳过" 等提示，或通�
 
 #### 1. 添加随机延迟
 
-在 `src/wechat_controller.py` 中添加随机等待时间：
+在 `src/gui_operations.py` 中添加随机等待时间：
 
 ```python
 import random
@@ -217,21 +217,22 @@ def send_text_message(self, contact_name: str, message: str):
 }
 ```
 
-在 `src/message_listener.py` 中实现随机轮询间隔：
+以下示例展示了随机轮询间隔的原理（供自定义开发参考）：
 
 ```python
 import random
 
-async def run(self):
-    """主运行循环"""
-    while not self._stop_event.is_set():
+# 示例：随机轮询间隔（概念参考）
+async def poll_loop():
+    """带随机间隔的轮询循环"""
+    while not stop_event.is_set():
         try:
-            await self._poll_messages()
+            await poll_messages()
         except Exception as e:
             logger.error(f"轮询出错: {e}")
         
         # 随机轮询间隔
-        base_interval = self._config.poll_interval
+        base_interval = 30  # 基础间隔（秒）
         random_offset = random.uniform(-10, 10)
         actual_interval = max(5, base_interval + random_offset)
         
@@ -240,9 +241,11 @@ async def run(self):
 
 #### 3. 避免立即回复
 
+以下示例展示了消息处理中如何添加延迟（供自定义开发参考）：
+
 ```python
-async def _handle_mention(self, mention: MentionMessage) -> None:
-    """处理 @ 提及消息：调用 AI -> 发送回复"""
+async def handle_incoming_message(content: str, sender: str) -> None:
+    """处理收到的消息（概念参考）"""
     
     # 模拟思考时间：3-15 秒的随机延迟
     think_time = random.uniform(3, 15)
@@ -250,12 +253,12 @@ async def _handle_mention(self, mention: MentionMessage) -> None:
     await asyncio.sleep(think_time)
     
     # 速率限制检查
-    if not self._rate_limiter.allow():
-        logger.warning("AI 调用速率超限，跳过此消息")
-        return  # 直接跳过，不发送任何回复
+    if not rate_limiter.allow():
+        logger.warning("速率超限，跳过此消息")
+        return
     
     # 调用 AI 服务
-    reply = await self._ai_client.chat(mention.content)
+    reply = await ai_client.chat(content)
     
     # 模拟打字时间：根据回复长度计算
     typing_time = len(reply) * 0.1  # 每字 0.1 秒
@@ -264,7 +267,7 @@ async def _handle_mention(self, mention: MentionMessage) -> None:
     await asyncio.sleep(typing_time)
     
     # 发送回复
-    await self._send_reply(mention.group_name, reply)
+    await send_reply(sender, reply)
 ```
 
 ### 策略三：严格控制使用频率
@@ -383,21 +386,21 @@ class EnhancedRateLimiter:
 
 #### 1. 添加工作时间限制
 
-在 `src/auto_reply.py` 中添加时间窗口检查：
+以下示例展示了工作时间控制的原理（v2.0 中已由 `anti_ban.WorkTimeController` 内置实现）：
 
 ```python
 import datetime
 
-class AutoReplyOrchestrator:
-    def __init__(self, config: Config):
-        # ... 现有代码
-        
+class WorkTimeChecker:
+    """工作时间检查器（概念参考）"""
+    
+    def __init__(self):
         # 工作时间配置（仅在这些时段运行）
         self._work_hours_start = 9   # 早上 9 点
         self._work_hours_end = 22    # 晚上 10 点
         self._work_days = [0, 1, 2, 3, 4]  # 周一到周五
     
-    def _is_work_time(self) -> bool:
+    def is_work_time(self) -> bool:
         """检查当前是否在工作时间内"""
         now = datetime.datetime.now()
         
@@ -411,24 +414,17 @@ class AutoReplyOrchestrator:
             return False
         
         return True
-    
-    async def _handle_mention(self, mention: MentionMessage) -> None:
-        """处理 @ 提及消息"""
-        
-        # 检查工作时间
-        if not self._is_work_time():
-            logger.info("当前不在工作时间，跳过此消息")
-            return
-        
-        # ... 其余处理逻辑
 ```
 
 #### 2. 添加每日运行时长限制
 
+以下示例展示了每日运行时长限制的原理（v2.0 中已由 `anti_ban.WorkTimeController` 内置实现）：
+
 ```python
-class AutoReplyOrchestrator:
-    def __init__(self, config: Config):
-        # ... 现有代码
+class DailyRuntimeLimiter:
+    """每日运行时长限制器（概念参考）"""
+    
+    def __init__(self):
         self._daily_runtime_limit = 4 * 3600  # 每天最多运行 4 小时
         self._daily_runtime = 0
         self._last_reset_date = datetime.date.today()
@@ -487,9 +483,11 @@ class AIClient:
 
 #### 2. 避免对所有消息都回复
 
+以下示例展示了消息跳过的原理（v2.0 中已由 `anti_ban.ContentDiversifier` 内置实现）：
+
 ```python
-async def _handle_mention(self, mention: MentionMessage) -> None:
-    """处理 @ 提及消息"""
+async def handle_message(content: str) -> None:
+    """消息处理（概念参考）"""
     
     # 随机跳过 20% 的消息（模拟人类可能错过或忽略消息）
     if random.random() < 0.2:
@@ -498,7 +496,7 @@ async def _handle_mention(self, mention: MentionMessage) -> None:
     
     # 对于简单的问候语，随机跳过 50%
     greetings = ["你好", "hi", "hello", "在吗", "在不"]
-    if any(g in mention.content.lower() for g in greetings):
+    if any(g in content.lower() for g in greetings):
         if random.random() < 0.5:
             logger.info("跳过简单问候（模拟人类可能不回复）")
             return
@@ -537,9 +535,13 @@ async def _handle_mention(self, mention: MentionMessage) -> None:
 
 #### 1. 减少 GUI 操作特征
 
+以下示例展示了自然 GUI 操作的原理（v2.0 中已由 `anti_ban.NaturalGUIOperations` 和 `src/gui_operations.py` 内置实现）：
+
 ```python
-class WeChatController:
-    def _click_position(self, x: int, y: int):
+class NaturalClick:
+    """自然点击模拟（概念参考）"""
+    
+    def click_position(self, x: int, y: int):
         """模拟更自然的鼠标点击"""
         # 添加位置随机偏移（±3 像素）
         x_offset = random.randint(-3, 3)
@@ -557,9 +559,11 @@ class WeChatController:
 
 #### 2. 保护剪贴板操作
 
+以下示例展示了安全剪贴板操作的原理（v2.0 中已由 `src/gui_operations.py` 中的 `_set_clipboard_and_paste` 和 `_restore_clipboard` 内置实现）：
+
 ```python
-def _paste_text_safe(self, text: str):
-    """更安全的剪贴板粘贴"""
+def paste_text_safe(text: str):
+    """更安全的剪贴板粘贴（概念参考）"""
     # 备份剪贴板
     old_clipboard = self._get_clipboard()
     
@@ -596,15 +600,6 @@ def _paste_text_safe(self, text: str):
 ```json
 {
   "http_port": 8080,
-  "poll_interval": 45,
-  "monitored_groups": ["私人测试群"],
-  "bot_name": "测试账号昵称",
-  "ai_base_url": "https://api.openai.com",
-  "ai_api_key": "sk-...",
-  "ai_model": "gpt-3.5-turbo",
-  "system_prompt": "你是一个友好的朋友，回复要简短自然，偶尔使用表情符号。",
-  "max_reply_chars": 200,
-  "ai_timeout": 30,
   "rate_limit_per_minute": 1,
   "rate_limit_per_hour": 8,
   "rate_limit_per_day": 30,

@@ -357,13 +357,6 @@ cp config.aggressive.json config.json
 ```json
 {
   "http_port": 8080,
-  "poll_interval": 30,
-  "monitored_groups": ["测试群"],
-  "bot_name": "你的昵称",
-  
-  "ai_base_url": "https://api.openai.com/v1",
-  "ai_api_key": "sk-...",
-  "ai_model": "gpt-3.5-turbo",
   
   "// 防封号配置": "以下为防封号相关配置",
   "rate_limit_per_minute": 3,
@@ -384,21 +377,20 @@ cp config.aggressive.json config.json
 ### 启动服务
 
 ```bash
-python src/auto_reply.py
+# 启动 HTTP API 服务器
+python src/http_server.py
+
+# 或启动 MCP 服务器（标准输入/输出模式）
+python mcp_server.py
 ```
 
 观察日志输出，应该能看到防封号系统的工作提示：
 
 ```
-2026-02-11 14:30:15 - 正在启动自动回复服务...
-2026-02-11 14:30:15 - 微信状态: NT框架
 2026-02-11 14:30:15 - HTTP 服务器已启动: http://0.0.0.0:8080
-2026-02-11 14:30:15 - 消息监听器已启动
-2026-02-11 14:30:45 - 处理 @ 提及 - 群: 测试群, 发送者: 张三
+2026-02-11 14:30:15 - 微信状态: NT框架
 2026-02-11 14:30:45 - 模拟思考时间: 5.34秒
-2026-02-11 14:30:50 - AI 回复已生成
-2026-02-11 14:30:50 - 内容多样化: 添加前缀
-2026-02-11 14:30:52 - 成功发送消息
+2026-02-11 14:30:50 - 成功发送消息
 ```
 
 ---
@@ -712,7 +704,7 @@ done
 
 3. 查看详细日志
    ```bash
-   python src/auto_reply.py 2>&1 | grep -i "anti\|rate\|think"
+   python src/http_server.py 2>&1 | grep -i "anti\|rate\|think"
    ```
 
 ### 问题 2：速率限制过于严格
