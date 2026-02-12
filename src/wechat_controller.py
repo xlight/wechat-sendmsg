@@ -173,6 +173,7 @@ class WeChatController:
             return None
 
         main_windows = []  # 主窗口（最高优先级）
+        chrome_windows = []  # Chrome 主窗口（新增，用于新版微信）
         contact_list_windows = []  # 联系人列表窗口（次优先级）
         chat_windows = []  # 聊天窗口（低优先级，尽量避免）
         all_wechat_windows = []  # 所有微信窗口（用于调试）
@@ -181,32 +182,70 @@ class WeChatController:
             class_name = win32gui.GetClassName(hwnd)
             window_text = win32gui.GetWindowText(hwnd)
             is_visible = win32gui.IsWindowVisible(hwnd)
+            
+            # 检查是否是微信进程的窗口
+            try:
+                import win32process
+                _, pid = win32process.GetWindowThreadProcessId(hwnd)
+                process = psutil.Process(pid)
+                process_name = process.name().lower()
+                is_wechat_process = 'wechat' in process_name
+            except:
+                is_wechat_process = False
 
             # 记录所有可能的微信窗口
-            if "WeChat" in class_name or "微信" in window_text or "WeChat" in window_text:
+            if is_wechat_process or "WeChat" in class_name or "微信" in window_text or "WeChat" in window_text:
+                rect = win32gui.GetWindowRect(hwnd)
+                width = rect[2] - rect[0]
+                height = rect[3] - rect[1]
                 all_wechat_windows.append({
                     'hwnd': hwnd,
                     'class': class_name,
                     'text': window_text,
                     'visible': is_visible,
-                    'iconic': win32gui.IsIconic(hwnd)
+                    'iconic': win32gui.IsIconic(hwnd),
+                    'size': (width, height),
+                    'area': width * height
                 })
 
+            # 【最高优先级】主窗口类名（微信 NT 框架主窗口）- 不论可见性
+            if class_name == "WeChatMainWndForPC":
+                self.logger.debug(f"找到主窗口: hwnd={hwnd}, class={class_name}, text={window_text}, visible={is_visible}")
+                if is_visible:
+                    main_windows.append(hwnd)
+                return True
+            
+            # 【次高优先级】Chrome 窗口（新版微信主窗口）- 不论可见性，检查窗口大小来区分主窗口和子窗口
+            if is_wechat_process and class_name == "Chrome_WidgetWin_0":
+                rect = win32gui.GetWindowRect(hwnd)
+                width = rect[2] - rect[0]
+                height = rect[3] - rect[1]
+                # 主窗口通常很大（>1000x600），小窗口可能是子窗口
+                if width > 1000 and height > 600:
+                    self.logger.debug(f"找到 Chrome 主窗口: hwnd={hwnd}, size={width}x{height}, visible={is_visible}")
+                    chrome_windows.append((hwnd, width * height))  # 存储窗口和面积（不论可见性）
+                return True
+
+            # 跳过其他不可见窗口
             if not is_visible:
                 return True
 
-            # 【最高优先级】主窗口类名（微信 NT 框架主窗口）
-            if class_name == "WeChatMainWndForPC":
-                self.logger.debug(f"找到主窗口: hwnd={hwnd}, class={class_name}, text={window_text}")
-                main_windows.append(hwnd)
-                return True
-
-            # 【次优先级】联系人列表窗口（通常标题只有"微信"或"WeChat"）
+            # 【次优先级】Qt 窗口（可能是主窗口或联系人列表窗口，根据大小区分）
             if re.match(r"Qt\d+QWindowIcon", class_name) or re.match(r"Qt\d+QWindowOwnDC", class_name):
                 # 标题只有"微信"或"WeChat"，没有聊天对象名称
                 if window_text in ["微信", "WeChat"]:
-                    self.logger.debug(f"找到联系人列表窗口: hwnd={hwnd}, class={class_name}, text={window_text}")
-                    contact_list_windows.append(hwnd)
+                    rect = win32gui.GetWindowRect(hwnd)
+                    width = rect[2] - rect[0]
+                    height = rect[3] - rect[1]
+                    
+                    # 根据窗口大小区分主窗口和联系人列表窗口
+                    # 主窗口通常很大（宽或高至少有一个>=800），联系人列表窗口较小（宽高都<800）
+                    if width >= 800 or height >= 800:
+                        self.logger.debug(f"找到主窗口（Qt大窗口）: hwnd={hwnd}, size={width}x{height}")
+                        main_windows.append(hwnd)
+                    else:
+                        self.logger.debug(f"找到联系人列表窗口（Qt小窗口）: hwnd={hwnd}, size={width}x{height}")
+                        contact_list_windows.append(hwnd)
                     return True
                 # 标题包含聊天对象名称，这是聊天窗口
                 elif "微信" in window_text or "WeChat" in window_text:
@@ -229,21 +268,40 @@ class WeChatController:
 
         win32gui.EnumWindows(enum_windows_callback, None)
 
-        self.logger.debug(f"窗口统计 - 主窗口: {len(main_windows)}, 联系人列表: {len(contact_list_windows)}, 聊天窗口: {len(chat_windows)}")
+        self.logger.debug(f"窗口统计 - 主窗口: {len(main_windows)}, Chrome窗口: {len(chrome_windows)}, 联系人列表: {len(contact_list_windows)}, 聊天窗口: {len(chat_windows)}")
 
-        # 【优先级 1】返回主窗口
+        # 【优先级 1】返回传统主窗口（WeChatMainWndForPC）
         if main_windows:
             self._last_window_kind = "nt"
             self.logger.info(f"✅ 找到主窗口: hwnd={main_windows[0]}")
             return main_windows[0]
 
-        # 【优先级 2】返回联系人列表窗口
+        # 【优先级 2】返回 Chrome 主窗口（新版微信 4.0+）
+        if chrome_windows:
+            # chrome_windows 是 (hwnd, area) 元组列表，按面积降序排序，选择最大的
+            chrome_windows.sort(key=lambda x: x[1], reverse=True)
+            hwnd = chrome_windows[0][0]
+            
+            # Chrome 窗口可能是不可见的，需要先显示
+            if not win32gui.IsWindowVisible(hwnd):
+                self.logger.info(f"Chrome 主窗口不可见，正在显示: hwnd={hwnd}")
+                try:
+                    win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
+                    self._natural_gui._random_pause(0.5, 1.0)
+                except Exception as e:
+                    self.logger.error(f"显示窗口失败: {e}")
+            
+            self._last_window_kind = "nt"
+            self.logger.info(f"✅ 找到 Chrome 主窗口: hwnd={hwnd}")
+            return hwnd
+
+        # 【优先级 3】返回联系人列表窗口（降级为备用方案）
         if contact_list_windows:
             self._last_window_kind = "nt"
-            self.logger.info(f"✅ 找到联系人列表窗口: hwnd={contact_list_windows[0]}")
+            self.logger.warning(f"⚠️  未找到主窗口，使用联系人列表窗口: hwnd={contact_list_windows[0]}")
             return contact_list_windows[0]
 
-        # 【优先级 3】如果只有聊天窗口，发出警告但仍然返回
+        # 【优先级 4】如果只有聊天窗口，发出警告但仍然返回
         if chat_windows:
             self._last_window_kind = "nt"
             self.logger.warning(f"⚠️  仅找到聊天窗口，建议打开微信主窗口: hwnd={chat_windows[0]}")
@@ -257,7 +315,7 @@ class WeChatController:
                                 f"text={win_info['text']}, visible={win_info['visible']}, "
                                 f"iconic={win_info['iconic']}")
 
-                # 优先恢复主窗口
+                # 【最高优先级】恢复传统主窗口
                 if win_info['class'] == "WeChatMainWndForPC":
                     hwnd = win_info['hwnd']
                     self.logger.info(f"尝试恢复微信主窗口: hwnd={hwnd}")
@@ -283,7 +341,34 @@ class WeChatController:
                         self.logger.warning(f"恢复主窗口失败: {e}")
                         continue
 
-                # 次优先级：恢复联系人列表窗口
+                # 【次高优先级】恢复 Chrome 主窗口（新版微信）
+                if win_info['class'] == "Chrome_WidgetWin_0" and win_info.get('area', 0) > 1000 * 600:
+                    hwnd = win_info['hwnd']
+                    width, height = win_info.get('size', (0, 0))
+                    self.logger.info(f"尝试恢复 Chrome 主窗口: hwnd={hwnd}, size={width}x{height}")
+                    try:
+                        # 如果窗口最小化，先恢复
+                        if win_info['iconic']:
+                            win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+                            self._natural_gui._random_pause(0.8, 1.5)
+                        # 如果窗口隐藏，显示它
+                        if not win_info['visible']:
+                            win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
+                            self._natural_gui._random_pause(0.8, 1.5)
+                        # 激活窗口
+                        win32gui.SetForegroundWindow(hwnd)
+                        self._natural_gui._random_pause(0.5, 1.0)
+
+                        # 验证窗口现在是否可见
+                        if win32gui.IsWindowVisible(hwnd):
+                            self.logger.info("✅ 成功恢复 Chrome 主窗口")
+                            self._last_window_kind = "nt"
+                            return hwnd
+                    except Exception as e:
+                        self.logger.warning(f"恢复 Chrome 主窗口失败: {e}")
+                        continue
+
+                # 【较低优先级】恢复联系人列表窗口
                 if win_info['text'] in ["微信", "WeChat"] and "Qt" in win_info['class']:
                     hwnd = win_info['hwnd']
                     self.logger.info(f"尝试恢复联系人列表窗口: hwnd={hwnd}")
@@ -351,33 +436,62 @@ class WeChatController:
                 self.logger.debug("✅ 窗口已成功激活")
                 return True
 
-            # 6. 如果标准置顶失败，使用 AttachThreadInput 大法
-            # 这是官方推荐的绕过 Foreground Lock 的方法
+            # 6. 如果标准置顶失败，使用多种方法绕过 Foreground Lock
             try:
                 import win32process
                 import ctypes
                 from ctypes import windll
 
+                # 6.1 先尝试模拟 Alt 按键（这会临时解除前台锁定）
+                try:
+                    self.logger.debug("尝试模拟 Alt 键解除前台锁定...")
+                    # 按下并释放 Alt 键
+                    windll.user32.keybd_event(0x12, 0, 0, 0)  # Alt down
+                    windll.user32.keybd_event(0x12, 0, 0x0002, 0)  # Alt up
+                    self._natural_gui._random_pause(0.05, 0.1)
+                    win32gui.SetForegroundWindow(hwnd)
+                except Exception as e:
+                    self.logger.debug(f"Alt 键方法失败: {e}")
+
+                # 6.2 使用 AttachThreadInput 方法
                 foreground_hwnd = win32gui.GetForegroundWindow()
-                if foreground_hwnd != 0:
+                if foreground_hwnd != 0 and foreground_hwnd != hwnd:
                     foreground_thread_id = win32process.GetWindowThreadProcessId(foreground_hwnd)[0]
+                    target_thread_id = win32process.GetWindowThreadProcessId(hwnd)[0]
                     current_thread_id = windll.kernel32.GetCurrentThreadId()
 
-                    if foreground_thread_id != current_thread_id:
-                        self.logger.debug("使用 AttachThreadInput 方法激活窗口...")
-                        # 附加输入上下文
+                    self.logger.debug("使用 AttachThreadInput 方法激活窗口...")
+                    # 方法 1: 附加当前线程到前台线程
+                    try:
                         windll.user32.AttachThreadInput(current_thread_id, foreground_thread_id, True)
-                        # 再次尝试置顶
-                        try:
-                            win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
-                            win32gui.SetForegroundWindow(hwnd)
-                            win32gui.SetFocus(hwnd)
-                        except Exception:
-                            pass
-                        # 解除附加
+                        win32gui.SetForegroundWindow(hwnd)
+                        win32gui.SetFocus(hwnd)
                         windll.user32.AttachThreadInput(current_thread_id, foreground_thread_id, False)
+                    except Exception as e:
+                        self.logger.debug(f"AttachThreadInput (方法1) 失败: {e}")
+                    
+                    # 方法 2: 附加目标线程到前台线程
+                    try:
+                        windll.user32.AttachThreadInput(target_thread_id, foreground_thread_id, True)
+                        win32gui.SetForegroundWindow(hwnd)
+                        win32gui.SetFocus(hwnd)
+                        windll.user32.AttachThreadInput(target_thread_id, foreground_thread_id, False)
+                    except Exception as e:
+                        self.logger.debug(f"AttachThreadInput (方法2) 失败: {e}")
+                
+                # 6.3 使用 BringWindowToTop 和 SetWindowPos
+                try:
+                    win32gui.BringWindowToTop(hwnd)
+                    # HWND_TOPMOST = -1, SWP_NOMOVE | SWP_NOSIZE = 0x0003
+                    windll.user32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0003)
+                    self._natural_gui._random_pause(0.05, 0.1)
+                    # HWND_NOTOPMOST = -2
+                    windll.user32.SetWindowPos(hwnd, -2, 0, 0, 0, 0, 0x0003)
+                    win32gui.SetForegroundWindow(hwnd)
+                except Exception as e:
+                    self.logger.debug(f"BringWindowToTop 方法失败: {e}")
             except Exception as e:
-                self.logger.debug(f"AttachThreadInput 失败: {e}")
+                self.logger.debug(f"高级激活方法失败: {e}")
 
             # 7. 等待并验证置顶结果
             self._natural_gui._random_pause(0.2, 0.4)

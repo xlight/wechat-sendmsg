@@ -403,9 +403,15 @@ class WeChatHTTPRequestHandler(BaseHTTPRequestHandler):
                     {"ok": False, "error": "Failed to send message", "details": result}, 500
                 )
         except Exception as e:
-            logger.error(f"发送消息时出错: {e}", exc_info=True)
+            # 安全地处理异常消息，避免编码问题
+            try:
+                error_msg = str(e)
+            except:
+                error_msg = f"{type(e).__name__}: (encoding error)"
+            
+            logger.error(f"发送消息时出错", exc_info=True)
             self._send_json_response(
-                {"ok": False, "error": f"Internal error: {str(e)}"}, 500
+                {"ok": False, "error": f"Internal error: {error_msg}"}, 500
             )
     
     def _handle_status(self) -> None:
