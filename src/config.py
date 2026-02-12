@@ -32,6 +32,8 @@ DEFAULTS: Dict[str, Any] = {
     "prefix_probability": 0.1,
     "suffix_probability": 0.05,
     "random_skip_probability": 0.2,
+    # 微信快捷键配置
+    "wechat_hotkey": "ctrl+alt+w",  # 激活微信窗口的快捷键（需在微信设置中配置）
     # 防封号配置 - GUI 操作
     "gui_offset_range": 3,
     "gui_move_duration_min": 0.1,
@@ -134,6 +136,11 @@ class Config:
     @property
     def gui_pause_max(self) -> float:
         return float(self._data.get("gui_pause_max", DEFAULTS["gui_pause_max"]))
+
+    @property
+    def wechat_hotkey(self) -> str:
+        """激活微信窗口的快捷键，格式如 'ctrl+alt+w'。"""
+        return str(self._data.get("wechat_hotkey", DEFAULTS["wechat_hotkey"]))
 
 
     # ------------------------------------------------------------------

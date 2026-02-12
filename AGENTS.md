@@ -36,7 +36,7 @@ chatwe-automate/
 │   ├── __init__.py               # 包初始化
 │   ├── mcp_server.py             # MCP 服务器核心实现
 │   ├── wechat_controller.py      # 微信自动化控制器（主入口，组合 Mixin）
-│   ├── window_finder.py          # WindowFinderMixin: 版本检测、窗口查找、窗口激活
+│   ├── window_finder.py          # WindowFinderMixin: 版本检测、窗口查找、快捷键激活、Win32 API 激活
 │   ├── tray_manager.py           # TrayManagerMixin: 系统托盘图标查找与双击恢复
 │   ├── gui_operations.py         # GUIOperationsMixin: 输入框定位、剪贴板输入、搜索联系人、发送
 │   ├── http_server.py            # HTTP API 服务器

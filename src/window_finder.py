@@ -7,9 +7,11 @@
 import ctypes
 import logging
 import re
-from typing import Any, Optional
+import time
+from typing import Any, List, Optional
 
 import psutil
+import pyautogui
 import win32api
 import win32con
 import win32gui
@@ -322,6 +324,83 @@ class WindowFinderMixin:
         for key in keys:
             if ctypes.windll.user32.GetKeyState(key) & 0x8000:
                 ctypes.windll.user32.keybd_event(key, 0, 0x0002, 0)  # Key up
+
+    def _activate_window_by_hotkey(self, hotkey: str = "ctrl+alt+w") -> Optional[int]:
+        """通过快捷键激活微信窗口。
+
+        需要用户在微信「设置 → 快捷键」中配置对应的快捷键。
+        成功时返回微信窗口句柄，失败时返回 None。
+
+        Args:
+            hotkey: 快捷键字符串，格式如 'ctrl+alt+w'，用 '+' 分隔各按键
+
+        Returns:
+            微信窗口句柄，或 None（激活失败）
+        """
+        try:
+            # 解析快捷键字符串为按键列表
+            keys: List[str] = [k.strip().lower() for k in hotkey.split('+')]
+            if not keys:
+                self.logger.warning("快捷键配置为空")
+                return None
+
+            self.logger.info(f"尝试通过快捷键 [{hotkey}] 激活微信窗口...")
+
+            # 确保修饰键已释放，避免与快捷键冲突
+            self._ensure_modifiers_released()
+
+            # 按下快捷键
+            pyautogui.hotkey(*keys)
+
+            # 等待窗口激活（微信窗口切换可能有延迟）
+            self._natural_gui._random_pause(0.5, 1.0)
+
+            # 检查前台窗口是否为微信
+            foreground_hwnd = win32gui.GetForegroundWindow()
+            if not foreground_hwnd:
+                self.logger.debug("快捷键按下后无前台窗口")
+                return None
+
+            if self._is_wechat_window(foreground_hwnd):
+                self.logger.info(f"快捷键激活微信窗口成功: hwnd={foreground_hwnd}")
+                self._last_window_kind = "nt"
+                return foreground_hwnd
+
+            # 可能有延迟，再等一会儿重试检查
+            self._natural_gui._random_pause(0.3, 0.5)
+            foreground_hwnd = win32gui.GetForegroundWindow()
+            if foreground_hwnd and self._is_wechat_window(foreground_hwnd):
+                self.logger.info(f"快捷键激活微信窗口成功（第二次检查）: hwnd={foreground_hwnd}")
+                self._last_window_kind = "nt"
+                return foreground_hwnd
+
+            self.logger.debug("快捷键按下后前台窗口不是微信，快捷键激活失败")
+            return None
+
+        except Exception as e:
+            self.logger.debug(f"快捷键激活微信窗口出错: {e}")
+            return None
+
+    def _is_wechat_window(self, hwnd: int) -> bool:
+        """判断指定窗口是否为微信窗口。
+
+        通过检查窗口所属进程名称来判断，避免误判其他程序的窗口。
+
+        Args:
+            hwnd: 窗口句柄
+
+        Returns:
+            True 表示是微信窗口
+        """
+        try:
+            _, pid = win32process.GetWindowThreadProcessId(hwnd)
+            if not pid:
+                return False
+            proc = psutil.Process(pid)
+            process_name = proc.name().lower()
+            return 'wechat' in process_name or 'weixin' in process_name
+        except (psutil.NoSuchProcess, psutil.AccessDenied, Exception):
+            return False
 
     def _activate_window(self, hwnd: int) -> bool:
         """激活微信窗口，支持从最小化/隐藏状态恢复。"""

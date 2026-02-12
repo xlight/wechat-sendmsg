@@ -57,6 +57,7 @@
 - ✅ **定时发送** - 支持延迟发送消息功能
 - ✅ **NT 框架支持** - 完全支持微信 4.0 以上的 NT 框架版本
 - ✅ **智能版本检测** - 自动检测微信版本并适配相应的操作方式
+- ✅ **快捷键窗口激活** - 优先通过全局快捷键激活微信窗口（需在微信设置中配置），失败时自动回退到 Win32 API
 - ✅ **系统托盘恢复** - 微信最小化到托盘时自动恢复窗口
 - ✅ **剪贴板输入技术** - 使用剪贴板输入，完全避免输入法状态影响
 - ✅ **多种发送方式** - 支持Enter、Ctrl+Enter、Alt+S等多种发送快捷键
@@ -252,9 +253,12 @@ python src/http_server.py
   "work_hours_start": 9,
   "work_hours_end": 22,
   "work_days": [0, 1, 2, 3, 4],
-  "max_daily_runtime_hours": 8.0
+  "max_daily_runtime_hours": 8.0,
+  "wechat_hotkey": "ctrl+alt+w"
 }
 ```
+
+> **`wechat_hotkey`** — 用于激活微信窗口的全局快捷键，需在微信「设置 → 快捷键」中配置相同的组合键。快捷键激活失败时会自动回退到 Win32 API 方式。
 
 详细的防封号配置说明请参考 [docs/AVOID_BAN.md](docs/AVOID_BAN.md)。
 
@@ -455,7 +459,7 @@ if __name__ == "__main__":
 采用 **Mixin 模式**拆分为 4 个模块，降低单文件复杂度：
 
 - **wechat_controller.py** - 主控制器入口，组合各 Mixin，提供 `send_text_message`、`schedule_message`、`get_status` 等公开 API
-- **window_finder.py** - `WindowFinderMixin`：微信版本检测、窗口查找、窗口激活、修饰键释放
+- **window_finder.py** - `WindowFinderMixin`：微信版本检测、窗口查找、快捷键激活（`_activate_window_by_hotkey`）、Win32 API 激活（`_activate_window`）、微信窗口判定（`_is_wechat_window`）、修饰键释放
 - **tray_manager.py** - `TrayManagerMixin`：系统托盘图标查找（跨进程 TBBUTTON 结构读取）、双击恢复（PostMessage 回调）
 - **gui_operations.py** - `GUIOperationsMixin`：输入框定位与点击、剪贴板输入与保护、联系人搜索、消息发送
 

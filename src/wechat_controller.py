@@ -24,11 +24,13 @@ try:
     from .window_finder import WindowFinderMixin
     from .gui_operations import GUIOperationsMixin
     from .anti_ban import NaturalGUIOperations
+    from .config import Config
 except ImportError:
     from tray_manager import TrayManagerMixin
     from window_finder import WindowFinderMixin
     from gui_operations import GUIOperationsMixin
     from anti_ban import NaturalGUIOperations
+    from config import Config
 
 
 class WeChatController(TrayManagerMixin, WindowFinderMixin, GUIOperationsMixin):
@@ -40,7 +42,7 @@ class WeChatController(TrayManagerMixin, WindowFinderMixin, GUIOperationsMixin):
     - GUIOperationsMixin 提供搜索联系人和发送消息功能
     """
 
-    def __init__(self):
+    def __init__(self, config: Optional[Config] = None):
         # 设置日志级别为DEBUG
         logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         self.logger = logging.getLogger(__name__)
@@ -55,13 +57,21 @@ class WeChatController(TrayManagerMixin, WindowFinderMixin, GUIOperationsMixin):
         self.is_nt_version: bool = False
         self._last_window_kind: Optional[str] = None
 
+        # 加载配置（支持外部传入，默认自动加载 config.json）
+        self._config: Config = config or Config()
+
         # 初始化自然 GUI 操作工具
         self._natural_gui = NaturalGUIOperations()
 
         self._detect_wechat_version()
 
     async def send_text_message(self, contact_name: str, message: str) -> Dict[str, Any]:
-        """向指定联系人发送文本消息。"""
+        """向指定联系人发送文本消息。
+
+        激活窗口的优先级：
+        1. 通过配置的快捷键激活微信窗口（需用户在微信设置中配置）
+        2. 快捷键失败时回退到 Win32 API 查找并激活窗口
+        """
         result: Dict[str, Any] = {
             "ok": False,
             "contact_name": contact_name,
@@ -70,6 +80,7 @@ class WeChatController(TrayManagerMixin, WindowFinderMixin, GUIOperationsMixin):
             "stage": None,
             "reason": None,
             "retry_used": None,
+            "activation_method": None,
         }
         try:
             version = self._detect_wechat_version()
@@ -81,25 +92,41 @@ class WeChatController(TrayManagerMixin, WindowFinderMixin, GUIOperationsMixin):
                 result["reason"] = "non_nt_version_skipped"
                 return result
 
-            hwnd = self._find_wechat_window()
-            if not hwnd:
-                result["stage"] = "find_window"
-                result["reason"] = "wechat_window_not_found"
-                return result
+            # ── 窗口激活：优先使用快捷键 ──
+            hwnd = None
+            hotkey = self._config.wechat_hotkey
+            hwnd = self._activate_window_by_hotkey(hotkey)
 
-            # 检查窗口大小（添加警告）
+            if hwnd:
+                result["activation_method"] = "hotkey"
+                self.logger.info(f"快捷键 [{hotkey}] 激活成功，使用 hwnd={hwnd}")
+            else:
+                # 快捷键失败，回退到 Win32 API
+                self.logger.info("快捷键激活失败，回退到 Win32 API 方式")
+                hwnd = self._find_wechat_window()
+                if not hwnd:
+                    result["stage"] = "find_window"
+                    result["reason"] = "wechat_window_not_found"
+                    return result
+
+                if not self._activate_window(hwnd):
+                    result["stage"] = "activate_window"
+                    result["reason"] = "failed_to_activate_window"
+                    return result
+                result["activation_method"] = "win32api"
+
+            # ── 窗口大小检查 ──
             try:
                 rect = win32gui.GetWindowRect(hwnd)
                 window_width = rect[2] - rect[0]
                 window_height = rect[3] - rect[1]
 
-                # 窗口太小的警告阈值
                 MIN_WINDOW_WIDTH = 600
                 MIN_WINDOW_HEIGHT = 400
 
                 if window_width < MIN_WINDOW_WIDTH or window_height < MIN_WINDOW_HEIGHT:
                     self.logger.warning(
-                        f"⚠️ 微信窗口尺寸过小 ({window_width}x{window_height})，"
+                        f"微信窗口尺寸过小 ({window_width}x{window_height})，"
                         f"建议至少 {MIN_WINDOW_WIDTH}x{MIN_WINDOW_HEIGHT}，"
                         f"可能导致输入框定位失败"
                     )
@@ -108,10 +135,7 @@ class WeChatController(TrayManagerMixin, WindowFinderMixin, GUIOperationsMixin):
             except Exception as e:
                 self.logger.debug(f"检查窗口大小时出错: {e}")
 
-            if not self._activate_window(hwnd):
-                result["stage"] = "activate_window"
-                result["reason"] = "failed_to_activate_window"
-                return result
+            # ── 搜索联系人并发送消息 ──
             if not self._search_contact_nt(contact_name):
                 result["stage"] = "search_contact"
                 result["reason"] = "search_failed"
