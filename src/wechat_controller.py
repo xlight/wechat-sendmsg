@@ -481,7 +481,7 @@ class WeChatController:
 
     def _search_contact_nt(self, contact_name: str) -> bool:
         """搜索联系人/群聊并打开聊天窗口（NT 框架）。"""
-        # Double check focus before typing
+        # 验证微信窗口焦点
         hwnd = self._find_wechat_window()
         if not hwnd or win32gui.GetForegroundWindow() != hwnd:
              self.logger.error("WeChat not focused, aborting search")
@@ -491,29 +491,25 @@ class WeChatController:
         try:
             # 打开搜索框
             pyautogui.hotkey('ctrl', 'f')
-            self.logger.error("打开搜索框 (Ctrl+F)")
-            time.sleep(3.0)
+            self.logger.debug("打开搜索框 (Ctrl+F)")
+            self._natural_gui._random_pause(0.5, 1.0)
 
             # 清空搜索框
             pyautogui.hotkey('ctrl', 'a')
-            self.logger.error("全选搜索框内容 (Ctrl+A)")
-            time.sleep(2.2)
+            self.logger.debug("全选搜索框内容 (Ctrl+A)")
+            self._natural_gui._random_pause(0.1, 0.3)
             pyautogui.press('delete')
-            self.logger.error("清空搜索框内容 (Delete)")
-            time.sleep(2.2)
+            self.logger.debug("清空搜索框内容 (Delete)")
+            self._natural_gui._random_pause(0.15, 0.35)
 
             # 输入联系人名称（粘贴）
             original_data = self._set_clipboard_and_paste(contact_name)
-            self.logger.error(f"输入联系人名称: {contact_name}")
-            time.sleep(5.2)
+            self.logger.debug(f"输入联系人名称: {contact_name}")
+            self._natural_gui._random_pause(0.3, 0.6)
 
             # 回车打开聊天
             pyautogui.press('enter')
-            time.sleep(5.0)
-
-            # 关闭聊天窗口
-            # pyautogui.press('escape')
-            # time.sleep(5.3)
+            self._natural_gui._random_pause(0.5, 1.0)
 
             self.logger.debug(f"成功搜索并打开: {contact_name}")
             return True
@@ -524,62 +520,61 @@ class WeChatController:
             self._restore_clipboard(original_data)
 
     def _send_text_nt(self, message: str) -> bool:
+        """发送文本消息（NT 框架）。
+        
+        按键优先级：Alt+S（主要） > Enter（备用） > Ctrl+Enter（备用）
+        """
         self.logger.debug(f"准备发送消息: {message[:20]}...")
         try:
+            # 查找并点击输入框
             if not self._find_and_click_input_box():
                 self.logger.error("输入框未找到，无法发送消息")
-                # 尝试再次寻找
-                time.sleep(5.5)
+                # 等待后重试
+                self._natural_gui._random_pause(0.8, 1.5)
                 if not self._find_and_click_input_box():
                     self.logger.error("再次尝试寻找输入框失败，发送消息中止")
                     return False
+            
             self.logger.debug("输入框已点击，准备输入消息...")
-            time.sleep(5.5)  # 等待输入框稳定
+            self._natural_gui._random_pause(0.3, 0.6)  # 等待输入框稳定
 
             # 清空输入框（以防有残留内容）
             pyautogui.hotkey('ctrl', 'a')
-            time.sleep(0.3)
+            self._natural_gui._random_pause(0.1, 0.2)
             pyautogui.press('delete')
-            time.sleep(0.3)
+            self._natural_gui._random_pause(0.15, 0.3)
 
             # 粘贴消息内容
             original_data = self._set_clipboard_and_paste(message)
             self.logger.debug("文本输入完成，准备发送...")
-            time.sleep(5.5)  # 等待输入稳定
+            self._natural_gui._random_pause(0.4, 0.8)  # 等待输入稳定
+            
+            # 发送消息 - 优先使用 Alt+S
             try:
-                pyautogui.press('enter')
-                self.logger.debug("按下 Enter 键发送消息")
-                time.sleep(5.6)
-                # 尝试恢复剪贴板，但失败不影响发送结果
-                try:
-                    self._restore_clipboard(original_data)
-                    self.logger.debug("剪贴板已恢复")
-                except Exception:
-                    pass
+                pyautogui.hotkey('alt', 's')
+                self.logger.debug("按下 Alt+S 键发送消息")
+                self._natural_gui._random_pause(0.5, 1.0)
+                self._restore_clipboard(original_data)
+                self.logger.debug("剪贴板已恢复")
                 return True
-            except Exception:
+            except Exception as e1:
+                self.logger.warning(f"Alt+S 发送失败，尝试 Enter: {e1}")
                 try:
-                    pyautogui.hotkey('ctrl', 'enter')
-                    self.logger.debug("按下 Ctrl+Enter 键发送消息")
-                    time.sleep(5.6)
-                    # 尝试恢复剪贴板，但失败不影响发送结果
-                    try:
-                        self._restore_clipboard(original_data)
-                    except Exception:
-                        pass
+                    pyautogui.press('enter')
+                    self.logger.debug("按下 Enter 键发送消息")
+                    self._natural_gui._random_pause(0.5, 1.0)
+                    self._restore_clipboard(original_data)
                     return True
-                except Exception:
+                except Exception as e2:
+                    self.logger.warning(f"Enter 发送失败，尝试 Ctrl+Enter: {e2}")
                     try:
-                        pyautogui.hotkey('alt', 's')
-                        self.logger.debug("按下 Alt+S 键发送消息")
-                        time.sleep(10.6)
-                        # 尝试恢复剪贴板，但失败不影响发送结果
-                        try:
-                            self._restore_clipboard(original_data)
-                        except Exception:
-                            pass
+                        pyautogui.hotkey('ctrl', 'enter')
+                        self.logger.debug("按下 Ctrl+Enter 键发送消息")
+                        self._natural_gui._random_pause(0.5, 1.0)
+                        self._restore_clipboard(original_data)
                         return True
-                    except Exception:
+                    except Exception as e3:
+                        self.logger.error(f"所有发送方式均失败: {e3}")
                         return False
         except Exception as e:
             self.logger.error(f"Failed to send text in NT: {e}")
