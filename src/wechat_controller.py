@@ -182,7 +182,7 @@ class WeChatController:
             class_name = win32gui.GetClassName(hwnd)
             window_text = win32gui.GetWindowText(hwnd)
             is_visible = win32gui.IsWindowVisible(hwnd)
-            
+
             # 检查是否是微信进程的窗口
             try:
                 import win32process
@@ -209,23 +209,23 @@ class WeChatController:
                 })
 
             # 【最高优先级】主窗口类名（微信 NT 框架主窗口）- 不论可见性
-            if class_name == "WeChatMainWndForPC":
-                self.logger.debug(f"找到主窗口: hwnd={hwnd}, class={class_name}, text={window_text}, visible={is_visible}")
-                if is_visible:
-                    main_windows.append(hwnd)
-                return True
-            
+            # if class_name == "WeChatMainWndForPC":
+            #     self.logger.debug(f"找到主窗口: hwnd={hwnd}, class={class_name}, text={window_text}, visible={is_visible}")
+            #     if is_visible:
+            #         main_windows.append(hwnd)
+            #     return True
+
             # 【次高优先级】Chrome 窗口（新版微信主窗口）- 不论可见性，检查窗口大小来区分主窗口和子窗口
-            if is_wechat_process and class_name == "Chrome_WidgetWin_0":
-                rect = win32gui.GetWindowRect(hwnd)
-                width = rect[2] - rect[0]
-                height = rect[3] - rect[1]
-                # 主窗口通常很大（>1000x600），小窗口可能是子窗口
-                if width > 1000 and height > 600:
-                    self.logger.debug(f"找到 Chrome 主窗口: hwnd={hwnd}, size={width}x{height}, visible={is_visible}")
-                    chrome_windows.append((hwnd, width * height))  # 存储窗口和面积（不论可见性）
-                return True
-            
+            # if is_wechat_process and class_name == "Chrome_WidgetWin_0":
+            #     rect = win32gui.GetWindowRect(hwnd)
+            #     width = rect[2] - rect[0]
+            #     height = rect[3] - rect[1]
+            #     # 主窗口通常很大（>1000x600），小窗口可能是子窗口
+            #     if width > 1000 and height > 600:
+            #         self.logger.debug(f"找到 Chrome 主窗口: hwnd={hwnd}, size={width}x{height}, visible={is_visible}")
+            #         chrome_windows.append((hwnd, width * height))  # 存储窗口和面积（不论可见性）
+            #     return True
+
             # 【次优先级】Qt 窗口（可能是主窗口或联系人列表窗口，根据大小区分）- 不论可见性
             if re.match(r"Qt\d+QWindowIcon", class_name) or re.match(r"Qt\d+QWindowOwnDC", class_name):
                 # 标题只有"微信"或"WeChat"，没有聊天对象名称
@@ -233,7 +233,7 @@ class WeChatController:
                     rect = win32gui.GetWindowRect(hwnd)
                     width = rect[2] - rect[0]
                     height = rect[3] - rect[1]
-                    
+
                     # 根据窗口大小区分主窗口和联系人列表窗口
                     # 主窗口通常很大（宽或高至少有一个>=800），联系人列表窗口较小（宽高都<800）
                     if width >= 800 or height >= 800:
@@ -284,7 +284,7 @@ class WeChatController:
             # chrome_windows 是 (hwnd, area) 元组列表，按面积降序排序，选择最大的
             chrome_windows.sort(key=lambda x: x[1], reverse=True)
             hwnd = chrome_windows[0][0]
-            
+
             # Chrome 窗口可能是不可见的，需要先显示
             if not win32gui.IsWindowVisible(hwnd):
                 self.logger.info(f"Chrome 主窗口不可见，正在显示: hwnd={hwnd}")
@@ -293,7 +293,7 @@ class WeChatController:
                     self._natural_gui._random_pause(0.5, 1.0)
                 except Exception as e:
                     self.logger.error(f"显示窗口失败: {e}")
-            
+
             self._last_window_kind = "nt"
             self.logger.info(f"✅ 找到 Chrome 主窗口: hwnd={hwnd}")
             return hwnd
@@ -375,11 +375,11 @@ class WeChatController:
                 if win_info['text'] in ["微信", "WeChat"] and "Qt" in win_info['class']:
                     hwnd = win_info['hwnd']
                     width, height = win_info.get('size', (0, 0))
-                    
+
                     # 根据大小区分主窗口和联系人列表窗口
                     is_main_window = width >= 800 or height >= 800
                     window_type = "Qt主窗口" if is_main_window else "联系人列表窗口"
-                    
+
                     self.logger.info(f"尝试恢复{window_type}: hwnd={hwnd}, size={width}x{height}")
                     try:
                         # 如果窗口最小化，先恢复
@@ -482,7 +482,7 @@ class WeChatController:
                         windll.user32.AttachThreadInput(current_thread_id, foreground_thread_id, False)
                     except Exception as e:
                         self.logger.debug(f"AttachThreadInput (方法1) 失败: {e}")
-                    
+
                     # 方法 2: 附加目标线程到前台线程
                     try:
                         windll.user32.AttachThreadInput(target_thread_id, foreground_thread_id, True)
@@ -491,7 +491,7 @@ class WeChatController:
                         windll.user32.AttachThreadInput(target_thread_id, foreground_thread_id, False)
                     except Exception as e:
                         self.logger.debug(f"AttachThreadInput (方法2) 失败: {e}")
-                
+
                 # 6.3 使用 BringWindowToTop 和 SetWindowPos
                 try:
                     win32gui.BringWindowToTop(hwnd)
@@ -805,11 +805,11 @@ class WeChatController:
                 rect = win32gui.GetWindowRect(hwnd)
                 window_width = rect[2] - rect[0]
                 window_height = rect[3] - rect[1]
-                
+
                 # 窗口太小的警告阈值
                 MIN_WINDOW_WIDTH = 600
                 MIN_WINDOW_HEIGHT = 400
-                
+
                 if window_width < MIN_WINDOW_WIDTH or window_height < MIN_WINDOW_HEIGHT:
                     self.logger.warning(
                         f"⚠️ 微信窗口尺寸过小 ({window_width}x{window_height})，"
