@@ -1,5 +1,7 @@
 # 托盘恢复机制改进说明
 
+**GitHub地址：https://github.com/xlight/wechat-sendmsg**
+
 ## 更新日期
 2026-02-12 (下午)
 

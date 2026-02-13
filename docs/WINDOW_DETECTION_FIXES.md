@@ -1,5 +1,7 @@
 # WeChat 窗口检测和激活功能修复总结
 
+**GitHub地址：https://github.com/xlight/wechat-sendmsg**
+
 ## 修复日期
 2026-02-12
 

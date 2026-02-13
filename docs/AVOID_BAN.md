@@ -1,5 +1,7 @@
 # 如何避免测试账号被封
 
+**GitHub地址：https://github.com/xlight/wechat-sendmsg**
+
 ## 🎉 防封号保护系统已集成
 
 **从 v2.0 开始，项目内置了全面的防封号保护系统。** 以下所有建议已通过 `anti_ban` 包自动实现：

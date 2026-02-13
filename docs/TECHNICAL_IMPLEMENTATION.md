@@ -1,5 +1,7 @@
 # 🔧 技术实现文档
 
+**GitHub地址：https://github.com/xlight/wechat-sendmsg**
+
 ## 🏗️ 技术架构
 
 ### 核心实现原理
@@ -118,7 +120,7 @@ flowchart TD
 ## 📁 项目结构技术说明
 
 ```
-WeChat-MCP-Server/
+WeChat-SendMsg/
 ├── 📂 src/
 │   ├── 📄 __init__.py               # 包初始化
 │   ├── 📄 mcp_server.py             # MCP 服务器 + HTTP API（FastMCP + Starlette 统一应用）
@@ -205,3 +207,5 @@ WeChat-MCP-Server/
 ---
 
 *本文档详细说明了项目的技术实现细节，适用于开发者和技术爱好者参考。普通用户请参考 README.md 获取简单易懂的使用指南。*
+
+**GitHub地址：https://github.com/xlight/wechat-sendmsg**

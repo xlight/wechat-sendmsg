@@ -1,6 +1,8 @@
 # 📚 技术文档索引
 
-欢迎来到 WeChat MCP Server 的技术文档中心！这里包含了项目的详细技术实现、配置说明和开发指南。
+欢迎来到 WeChat SendMsg 的技术文档中心！这里包含了项目的详细技术实现、配置说明和开发指南。
+
+**GitHub地址：https://github.com/xlight/wechat-sendmsg**
 
 ## 📖 文档列表
 
@@ -123,5 +125,7 @@ pip install -r requirements.txt
 
 ---
 
-*本文档最后更新：2024年*
+*本文档最后更新：2026年*
 *更多技术细节请查阅各子文档*
+
+**GitHub地址：https://github.com/xlight/wechat-sendmsg**

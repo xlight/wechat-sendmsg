@@ -1,5 +1,7 @@
 # 快速开始指南
 
+**GitHub地址：https://github.com/xlight/wechat-sendmsg**
+
 ## 目录
 
 - [环境准备](#环境准备)
@@ -19,7 +21,7 @@
 
 2. **安装依赖包**
    ```bash
-   cd WeChat-MCP-Server
+   cd wechat-sendmsg
    pip install -r requirements.txt
    ```
 
@@ -51,7 +53,7 @@ python mcp_client_example.py
 如果看到类似输出，说明服务器工作正常：
 ```
 正在以 stdio 模式启动 MCP 服务器...
-已连接到服务器: wechat-mcp-server v2.0.0
+已连接到服务器: wechat-sendmsg v2.0.0
 协议版本: 2024-11-05
 可用工具 (6 个):
   - send_wechat_message: 向微信联系人或群组发送文本消息。
@@ -76,7 +78,7 @@ python mcp_client_example.py
      "mcpServers": {
        "wechat": {
          "command": "python",
-         "args": ["C:/path/to/WeChat-MCP-Server/src/mcp_server.py"],
+         "args": ["C:/path/to/wechat-sendmsg/src/mcp_server.py"],
          "env": {}
        }
      }
@@ -277,7 +279,7 @@ python build.py --standalone
 
 ```bash
 # 直接双击 exe 或命令行启动
-dist/wechat-mcp-server.exe
+dist/wechat-sendmsg.exe
 ```
 
 编译后的 exe 会自动以系统托盘模式运行，使用 streamable-http 传输模式。配置文件和数据库存放在 exe 同级的 `data/` 目录中。

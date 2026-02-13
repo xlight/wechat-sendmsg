@@ -1,6 +1,8 @@
-# WeChat MCP Server
+# WeChat SendMsg
 
 <div align="center">
+
+**GitHub地址：https://github.com/xlight/wechat-sendmsg**
 
 ![GitHub stars](https://img.shields.io/github/stars/xlight/wechat-sendmsg?style=social)
 ![GitHub forks](https://img.shields.io/github/forks/xlight/wechat-sendmsg?style=social)

@@ -1,5 +1,7 @@
 # 防封号保护系统使用指南
 
+**GitHub地址：https://github.com/xlight/wechat-sendmsg**
+
 ## 📖 目录
 
 - [系统概述](#系统概述)
@@ -998,6 +1000,6 @@ A: 不建议。但你可以设置极端配置：
 
 **最后更新**: 2026-02-11  
 **文档版本**: v1.0  
-**适用系统版本**: WeChat MCP Server v2.0+
+**适用系统版本**: WeChat SendMsg v2.0+
 
-如有疑问，请查看 [GitHub Issues](https://github.com/1052666/WeChat-MCP-Server/issues) 或阅读源代码。
+如有疑问，请查看 [GitHub Issues](https://github.com/xlight/wechat-sendmsg/issues) 或阅读源代码。
