@@ -1,6 +1,37 @@
+# ── IDE / 编辑器 ──
 .agent/
 .opencode/
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
 
 src/__pycache__/
 
 *.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── 项目数据（运行时生成） ──
+data/config.json
+data/messages.db
+data/*.db
+data/*.log
+
+# ── 构建产物 ──
+dist/
+build/
+*.egg-info/
+*.spec
+
+# ── 系统文件 ──
+.DS_Store
+Thumbs.db
+*.log
+
+# ── 测试临时文件 ──
+tests/*_output.txt
