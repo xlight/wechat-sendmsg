@@ -58,25 +58,6 @@ class FakeSBApplication:
         return cls(pid)
 
 
-class FakeNSPasteboard:
-    """模拟 NSPasteboard。"""
-    def __init__(self):
-        self._data = None
-
-    def stringForType_(self, t):
-        return self._data
-
-    def clearContents(self):
-        self._data = None
-
-    def setString_forType_(self, s, t):
-        self._data = s
-
-    @classmethod
-    def generalPasteboard(cls):
-        return cls()
-
-
 class FakeNSBundle:
     """模拟 NSBundle。"""
     def __init__(self, version='4.1.0'):
@@ -89,52 +70,6 @@ class FakeNSBundle:
     @classmethod
     def bundleWithURL_(cls, url):
         return cls()
-
-
-@patch.dict('sys.modules', {
-    'AppKit': APPKIT_MOCK,
-    'ScriptingBridge': MagicMock(SBApplication=FakeSBApplication),
-    'Foundation': MagicMock(NSBundle=FakeNSBundle),
-})
-class TestMacWindowFinder(unittest.TestCase):
-    """测试 MacWindowFinder。"""
-
-    def setUp(self):
-        from platform.mac.window_finder import MacWindowFinder
-        self.finder = MacWindowFinder()
-
-    @patch('platform.mac.window_finder.MacWindowFinder._workspace',
-           return_value=FakeNSWorkspace)
-    def test_find_wechat_window_found(self, mock_ws):
-        """找到微信进程。"""
-        pid = self.finder.find_wechat_window()
-        self.assertEqual(pid, 12345)
-
-    @patch('platform.mac.window_finder.MacWindowFinder._workspace',
-           return_value=lambda: FakeNSWorkspace([]))
-    def test_find_wechat_window_not_found(self, mock_ws):
-        """未找到微信进程。"""
-        pid = self.finder.find_wechat_window()
-        self.assertIsNone(pid)
-
-    def test_is_wechat_available(self):
-        """微信可用性检查。"""
-        available = self.finder.is_wechat_available()
-        self.assertIsNotNone(available)  # 结果类型正确
-
-    @patch('platform.mac.window_finder.MacWindowFinder._sb',
-           return_value=FakeSBApplication)
-    def test_activate_window(self, mock_sb):
-        """激活微信窗口。"""
-        result = self.finder.activate_window(12345)
-        self.assertTrue(result)
-
-    def test_get_status(self):
-        """获取状态信息。"""
-        status = self.finder.get_status()
-        self.assertIn('wechat_available', status)
-        self.assertIn('platform', status)
-        self.assertEqual(status['platform'], 'macos')
 
 
 class FakeNSPasteboardInst:
@@ -160,24 +95,67 @@ class FakeNSPasteboardInst:
         return cls._singleton
 
 
+@patch.dict('sys.modules', {
+    'AppKit': APPKIT_MOCK,
+    'ScriptingBridge': MagicMock(SBApplication=FakeSBApplication),
+    'Foundation': MagicMock(NSBundle=FakeNSBundle),
+})
+class TestMacWindowFinder(unittest.TestCase):
+    """测试 MacWindowFinder。"""
+
+    def setUp(self):
+        from platforms.mac.window_finder import MacWindowFinder
+        self.finder = MacWindowFinder()
+
+    @patch('platforms.mac.window_finder.MacWindowFinder._workspace',
+               return_value=FakeNSWorkspace)
+    def test_find_wechat_window_found(self, mock_ws):
+        """找到微信进程。"""
+        pid = self.finder.find_wechat_window()
+        self.assertEqual(pid, 12345)
+
+    @patch('platforms.mac.window_finder.MacWindowFinder._workspace',
+               return_value=lambda: FakeNSWorkspace([]))
+    def test_find_wechat_window_not_found(self, mock_ws):
+        """未找到微信进程。"""
+        pid = self.finder.find_wechat_window()
+        self.assertIsNone(pid)
+
+    def test_is_wechat_available(self):
+        """微信可用性检查。"""
+        available = self.finder.is_wechat_available()
+        self.assertIsNotNone(available)
+
+    @patch('platforms.mac.window_finder.MacWindowFinder._sb',
+               return_value=FakeSBApplication)
+    def test_activate_window(self, mock_sb):
+        """激活微信窗口。"""
+        result = self.finder.activate_window(12345)
+        self.assertTrue(result)
+
+    def test_get_status(self):
+        """获取状态信息。"""
+        status = self.finder.get_status()
+        self.assertIn('wechat_available', status)
+        self.assertIn('platform', status)
+        self.assertEqual(status['platform'], 'macos')
+
+
 class TestMacClipboard(unittest.TestCase):
     """测试 MacClipboard。"""
 
     def setUp(self):
-        # 每个测试前重置 singleton
         FakeNSPasteboardInst._singleton = None
 
-        # Mock pyautogui 避免 macOS 3.13 上的导入兼容性问题
-        self._patcher_pg = patch('platform.mac.gui_ops._get_pg', return_value=MagicMock())
+        self._patcher_pg = patch('platforms.mac.gui_ops._get_pg', return_value=MagicMock())
         self._patcher_pg.start()
 
-        # Mock _pb 方法直接返回 FakeNSPasteboardInst 的类引用
         pasteboard = FakeNSPasteboardInst
-        self._patcher_ns = patch('platform.mac.gui_ops.MacClipboard._pb',
+        self._patcher_ns = patch('platforms.mac.gui_ops.MacClipboard._pb',
             return_value=(pasteboard, 'public.utf8-plain-text'))
         self._patcher_ns.start()
 
-        from platform.mac.gui_ops import MacClipboard
+        from platforms.mac.gui_ops import MacClipboard
         self.clip = MacClipboard()
 
     def tearDown(self):
