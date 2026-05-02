@@ -6,5 +6,5 @@
 from .mcp_server import MCPServer
 from .wechat_controller import WeChatController
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 __all__ = ["MCPServer", "WeChatController"]
