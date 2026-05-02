@@ -137,24 +137,58 @@ class TestMacWindowFinder(unittest.TestCase):
         self.assertEqual(status['platform'], 'macos')
 
 
-@patch.dict('sys.modules', {
-    'AppKit': MagicMock(NSPasteboard=FakeNSPasteboard, NSPasteboardTypeString='public.utf8-plain-text'),
-})
+class FakeNSPasteboardInst:
+    """模拟 NSPasteboard — 单例模式确保所有调用共享同一个实例。"""
+    _singleton = None
+
+    def __init__(self):
+        self._data = None
+
+    def stringForType_(self, t):
+        return self._data
+
+    def clearContents(self):
+        pass
+
+    def setString_forType_(self, s, t):
+        self._data = s
+
+    @classmethod
+    def generalPasteboard(cls):
+        if cls._singleton is None:
+            cls._singleton = cls()
+        return cls._singleton
+
+
 class TestMacClipboard(unittest.TestCase):
     """测试 MacClipboard。"""
 
     def setUp(self):
+        # 每个测试前重置 singleton
+        FakeNSPasteboardInst._singleton = None
+
+        # Mock pyautogui 避免 macOS 3.13 上的导入兼容性问题
+        self._patcher_pg = patch('platform.mac.gui_ops._get_pg', return_value=MagicMock())
+        self._patcher_pg.start()
+
+        # Mock _pb 方法直接返回 FakeNSPasteboardInst 的类引用
+        pasteboard = FakeNSPasteboardInst
+        self._patcher_ns = patch('platform.mac.gui_ops.MacClipboard._pb',
+            return_value=(pasteboard, 'public.utf8-plain-text'))
+        self._patcher_ns.start()
+
         from platform.mac.gui_ops import MacClipboard
         self.clip = MacClipboard()
 
+    def tearDown(self):
+        self._patcher_ns.stop()
+        self._patcher_pg.stop()
+
     def test_backup_and_restore(self):
         """剪贴板备份与恢复。"""
-        # 先设置内容
         self.clip.set_and_paste('hello')
-        # 备份
         backup = self.clip.backup()
         self.assertEqual(backup, 'hello')
-        # 恢复
         self.clip.restore('world')
         restored = self.clip.backup()
         self.assertEqual(restored, 'world')
@@ -166,7 +200,7 @@ class TestMacClipboard(unittest.TestCase):
 
     def test_restore_none(self):
         """恢复 None 不报错。"""
-        self.clip.restore(None)  # 不应该抛异常
+        self.clip.restore(None)
 
 
 if __name__ == '__main__':

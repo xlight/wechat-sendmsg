@@ -98,7 +98,16 @@ pip install -r requirements.txt
 - macOS: `pyobjc-core`, `pyobjc-framework-Cocoa`, `pyobjc-framework-Quartz`
 - Linux: `pyperclip`（系统需额外安装 `xdotool`, `wmctrl`, `xclip`）
 
-### 运行测试
+## 运行测试
+
+**必须设置 PYTHONPATH：**
+```bash
+# 正确 ✅
+PYTHONPATH=src python -m unittest discover -s tests -p "test_*.py" -v
+
+# 错误 ❌ — 缺少 PYTHONPATH 会导致平台导入冲突
+python -m unittest
+```
 
 **检查语法：**
 ```bash

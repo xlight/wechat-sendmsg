@@ -17,11 +17,19 @@ import time
 import random
 from typing import Optional
 
-import pyautogui
+# ⚠️ pyautogui 使用懒加载
+_pyautogui = None
 
 from ..base import GUIOperations
 
 logger = logging.getLogger(__name__)
+
+
+def _get_pg():
+    global _pyautogui
+    if _pyautogui is None:
+        import pyautogui as _pyautogui
+    return _pyautogui
 
 
 class MacGUIOperations(GUIOperations):
@@ -35,19 +43,19 @@ class MacGUIOperations(GUIOperations):
         """搜索联系人：Cmd+F → 粘贴名称 → Enter。"""
         try:
             self._logger.debug(f"搜索联系人: {contact_name}")
-            pyautogui.hotkey('command', 'f')
+            pg = _get_pg()
+            pg.hotkey('command', 'f')
             self._pause(0.4, 0.8)
-            pyautogui.hotkey('command', 'a')
+            pg.hotkey('command', 'a')
             self._pause(0.1, 0.2)
-            pyautogui.press('delete')
+            pg.press('delete')
             self._pause(0.15, 0.3)
 
-            # 使用跨平台 Clipboard 设置并粘贴
             from ..clipboard import Clipboard
             cb = Clipboard()
             original = cb.set_and_paste(contact_name)
             self._pause(0.3, 0.6)
-            pyautogui.press('enter')
+            pg.press('enter')
             self._pause(0.5, 1.0)
             cb.restore(original)
 
@@ -66,16 +74,17 @@ class MacGUIOperations(GUIOperations):
                     return False
             self._pause(0.3, 0.6)
 
-            pyautogui.hotkey('command', 'a')
+            pg = _get_pg()
+            pg.hotkey('command', 'a')
             self._pause(0.1, 0.2)
-            pyautogui.press('delete')
+            pg.press('delete')
             self._pause(0.15, 0.3)
 
             from ..clipboard import Clipboard
             cb = Clipboard()
             original = cb.set_and_paste(message)
             self._pause(0.4, 0.8)
-            pyautogui.hotkey('command', 'enter')
+            pg.hotkey('command', 'enter')
             self._pause(0.5, 1.0)
             cb.restore(original)
 
@@ -88,7 +97,8 @@ class MacGUIOperations(GUIOperations):
     def click_input_box(self) -> bool:
         """点击聊天输入框（屏幕坐标）。"""
         try:
-            sw, sh = pyautogui.size()
+            pg = _get_pg()
+            sw, sh = pg.size()
             positions = [
                 (sw // 2, sh - 80),
                 (sw // 2, sh - 100),
@@ -98,16 +108,16 @@ class MacGUIOperations(GUIOperations):
             ]
             for x, y in positions:
                 try:
-                    pyautogui.click(x, y)
+                    pg.click(x, y)
                     self._pause(0.2, 0.4)
                     return True
                 except Exception:
                     continue
 
             self._logger.warning("尝试 Tab 切换焦点")
-            pyautogui.press('tab')
+            pg.press('tab')
             self._pause(0.2, 0.4)
-            pyautogui.press('tab')
+            pg.press('tab')
             self._pause(0.2, 0.4)
             return False
         except Exception as e:
@@ -150,7 +160,8 @@ class MacClipboard:
             pb.clearContents()
             pb.setString_forType_(text, NSType)
             time.sleep(0.1)
-            pyautogui.hotkey('command', 'v')
+            pg = _get_pg()
+            pg.hotkey('command', 'v')
             return original
         except Exception as e:
             logger.error(f"剪贴板设置失败: {e}")

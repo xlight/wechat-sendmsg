@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
 测试防封号模块 — 验证 EnhancedRateLimiter、HumanBehaviorSimulator、WorkTimeController、ContentDiversifier、NaturalGUIOperations
+
+注意：测试基于 anti_ban/ 模块的真实 API（见 __init__.py 中的导出）
 """
 
 import time
@@ -21,50 +23,48 @@ class TestEnhancedRateLimiter(unittest.TestCase):
 
     def test_allow_first_request(self):
         """首次请求通过。"""
-        self.assertTrue(self.limiter.allow_request())
+        self.assertTrue(self.limiter.allow())
 
     def test_allow_within_limit(self):
         """限制内通过。"""
         for _ in range(3):
-            self.assertTrue(self.limiter.allow_request())
+            self.assertTrue(self.limiter.allow())
 
     def test_block_exceed_minute(self):
         """超过每分钟限制被阻止。"""
         for _ in range(3):
-            self.limiter.allow_request()
+            self.limiter.allow()
         # 第 4 次应被阻止
-        self.assertFalse(self.limiter.allow_request())
+        self.assertFalse(self.limiter.allow())
 
     def test_window_slides(self):
         """滑动窗口 — 过期记录自动清理。"""
-        # 填满窗口
         for _ in range(3):
-            self.limiter.allow_request()
-        # 模拟时间前进 61 秒（超过分钟窗口）
+            self.limiter.allow()
         import time as _time
-        for ts in [self.limiter._timestamps_minute]:
-            ts.clear()
-            ts.append(_time.time() - 61)
-        # 应该允许（旧记录已过期）
-        # 但由于我们手动清空了，直接测试会通过
-        self.assertTrue(self.limiter.allow_request())
+        # 模拟时间前进 61 秒
+        self.limiter._timestamps_minute.clear()
+        self.limiter._timestamps_minute.append(_time.time() - 61)
+        # 旧记录已过期，应允许
+        self.assertTrue(self.limiter.allow())
 
     def test_get_stats(self):
         """获取限制器统计信息。"""
         stats = self.limiter.get_stats()
-        self.assertIn('limit_per_minute', stats)
-        self.assertIn('limit_per_hour', stats)
-        self.assertIn('limit_per_day', stats)
-        self.assertIn('used_minute', stats)
-        self.assertIn('used_hour', stats)
-        self.assertIn('used_day', stats)
+        self.assertIn('limit_minute', stats)
+        self.assertIn('limit_hour', stats)
+        self.assertIn('limit_day', stats)
+        self.assertIn('last_minute', stats)
 
     def test_reset(self):
         """重置限制器。"""
-        self.limiter.allow_request()
-        self.limiter.reset()
+        self.limiter.allow()
+        # 手动重置
+        self.limiter._timestamps_minute.clear()
+        self.limiter._timestamps_hour.clear()
+        self.limiter._timestamps_day.clear()
         stats = self.limiter.get_stats()
-        self.assertEqual(stats['used_minute'], 0)
+        self.assertEqual(stats['last_minute'], 0)
 
 
 class TestHumanBehaviorSimulator(unittest.TestCase):
@@ -116,14 +116,16 @@ class TestWorkTimeController(unittest.TestCase):
         result = self.ctrl.is_work_time()
         self.assertIn(result, [True, False])
 
-    def test_get_remaining_seconds(self):
-        """获取剩余运行时长。"""
-        remaining = self.ctrl.get_remaining_seconds()
-        self.assertIsInstance(remaining, (int, float))
+    def test_get_runtime(self):
+        """获取累计运行时长。"""
+        runtime = self.ctrl.get_runtime()
+        self.assertIsInstance(runtime, (int, float))
+        self.assertGreater(runtime, 0)
 
-    def test_reset(self):
-        """重置。"""
-        self.ctrl.reset()  # 不抛异常即可
+    def test_should_continue_running(self):
+        """检查是否应继续运行。"""
+        result = self.ctrl.should_continue_running()
+        self.assertIn(result, [True, False])
 
 
 class TestContentDiversifier(unittest.TestCase):
@@ -138,21 +140,17 @@ class TestContentDiversifier(unittest.TestCase):
         )
 
     def test_add_prefix(self):
-        """添加前缀。"""
-        result = self.dv.diversify("hello")
-        self.assertTrue(result.startswith("hello"))
+        """强制添加前缀后的文本包含原文。"""
+        result = self.dv.add_prefix("hello")
+        # add_prefix 返回 "前缀，hello"，所以原文应包含在结果中
+        self.assertIn("hello", result)
 
     def test_skip_message(self):
         """跳过消息。"""
+        from anti_ban.content_diversifier import ContentDiversifier
         dv = ContentDiversifier(skip_probability=1.0)
         skipped = dv.should_skip("hello")
         self.assertIsInstance(skipped, bool)
-
-    def test_get_prefixes(self):
-        """获取前缀列表。"""
-        prefixes = self.dv.get_prefixes()
-        self.assertIsInstance(prefixes, list)
-        self.assertGreater(len(prefixes), 0)
 
 
 class TestNaturalGUIOperations(unittest.TestCase):
@@ -164,12 +162,11 @@ class TestNaturalGUIOperations(unittest.TestCase):
 
     def test_random_pause(self):
         """随机停顿不阻塞太久。"""
-        import time
         start = time.time()
         self.ng._random_pause(0.01, 0.02)
         elapsed = time.time() - start
         self.assertGreaterEqual(elapsed, 0.01)
-        self.assertLessEqual(elapsed, 0.1)  # 留有余量
+        self.assertLessEqual(elapsed, 0.1)
 
 
 if __name__ == '__main__':

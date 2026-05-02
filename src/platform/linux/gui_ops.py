@@ -22,11 +22,19 @@ import subprocess
 import shutil
 from typing import Optional
 
-import pyautogui
+# ⚠️ pyautogui 使用懒加载
+_pyautogui = None
 
 from ..base import GUIOperations
 
 logger = logging.getLogger(__name__)
+
+
+def _get_pg():
+    global _pyautogui
+    if _pyautogui is None:
+        import pyautogui as _pyautogui
+    return _pyautogui
 
 
 class LinuxGUIOperations(GUIOperations):
@@ -41,18 +49,19 @@ class LinuxGUIOperations(GUIOperations):
         """搜索联系人：Ctrl+F → 粘贴名称 → Enter。"""
         try:
             self._logger.debug(f"搜索联系人: {contact_name}")
-            pyautogui.hotkey('ctrl', 'f')
+            pg = _get_pg()
+            pg.hotkey('ctrl', 'f')
             self._pause(0.4, 0.8)
-            pyautogui.hotkey('ctrl', 'a')
+            pg.hotkey('ctrl', 'a')
             self._pause(0.1, 0.2)
-            pyautogui.press('delete')
+            pg.press('delete')
             self._pause(0.15, 0.3)
 
             from ..clipboard import Clipboard
             cb = Clipboard()
             original = cb.set_and_paste(contact_name)
             self._pause(0.3, 0.6)
-            pyautogui.press('enter')
+            pg.press('enter')
             self._pause(0.5, 1.0)
             cb.restore(original)
 
@@ -71,9 +80,10 @@ class LinuxGUIOperations(GUIOperations):
                     return False
             self._pause(0.3, 0.6)
 
-            pyautogui.hotkey('ctrl', 'a')
+            pg = _get_pg()
+            pg.hotkey('ctrl', 'a')
             self._pause(0.1, 0.2)
-            pyautogui.press('delete')
+            pg.press('delete')
             self._pause(0.15, 0.3)
 
             from ..clipboard import Clipboard
@@ -83,9 +93,9 @@ class LinuxGUIOperations(GUIOperations):
 
             # 发送：优先 Alt+S，回退 Enter
             try:
-                pyautogui.hotkey('alt', 's')
+                pg.hotkey('alt', 's')
             except Exception:
-                pyautogui.press('enter')
+                pg.press('enter')
 
             self._pause(0.5, 1.0)
             cb.restore(original)
@@ -99,7 +109,8 @@ class LinuxGUIOperations(GUIOperations):
     def click_input_box(self) -> bool:
         """点击聊天输入框（屏幕坐标）。"""
         try:
-            sw, sh = pyautogui.size()
+            pg = _get_pg()
+            sw, sh = pg.size()
             positions = [
                 (sw // 2, sh - 80),
                 (sw // 2, sh - 100),
@@ -109,7 +120,7 @@ class LinuxGUIOperations(GUIOperations):
             ]
             for x, y in positions:
                 try:
-                    pyautogui.click(x, y)
+                    pg.click(x, y)
                     self._pause(0.2, 0.4)
                     return True
                 except Exception:
@@ -140,46 +151,46 @@ class LinuxClipboard:
             logger.warning("未找到 xclip，剪贴板操作将受限。请安装：sudo apt install xclip")
 
     @staticmethod
-    def _xclip(stdin: str = "", selection: str = "c") -> Optional[str]:
-        """调用 xclip 命令行。"""
+    def _xclip_read() -> Optional[str]:
+        """读取当前剪贴板内容。"""
         try:
             r = subprocess.run(
-                ['xclip', '-selection', selection, '-o'],
+                ['xclip', '-selection', 'c', '-o'],
                 capture_output=True, text=True, timeout=3,
             )
             return r.stdout.strip() if r.returncode == 0 else None
         except Exception:
             return None
 
+    @staticmethod
+    def _xclip_write(text: str) -> bool:
+        """写入剪贴板内容。"""
+        try:
+            subprocess.run(
+                ['xclip', '-selection', 'c'],
+                input=text, text=True, timeout=3,
+            )
+            return True
+        except Exception:
+            return False
+
     def backup(self) -> Optional[str]:
         if not self._has_xclip:
             return None
-        return self._xclip()
+        return self._xclip_read()
 
     def set_and_paste(self, text: str) -> Optional[str]:
         original = self.backup()
         if not self._has_xclip:
             return None
-        try:
-            # 设置剪贴板
-            subprocess.run(
-                ['xclip', '-selection', 'c'],
-                input=text, text=True, timeout=3,
-            )
-            time.sleep(0.1)
-            pyautogui.hotkey('ctrl', 'v')
-            return original
-        except Exception as e:
-            logger.error(f"剪贴板设置失败: {e}")
+        if not self._xclip_write(text):
             return None
+        time.sleep(0.1)
+        pg = _get_pg()
+        pg.hotkey('ctrl', 'v')
+        return original
 
     def restore(self, original_data: Optional[str]) -> None:
         if original_data is None or not self._has_xclip:
             return
-        try:
-            subprocess.run(
-                ['xclip', '-selection', 'c'],
-                input=original_data, text=True, timeout=3,
-            )
-        except Exception:
-            pass
+        self._xclip_write(original_data)

@@ -2,11 +2,7 @@
 """
 跨平台微信控制器
 
-通过 platform 抽象层自动适配当前操作系统：
-- Windows: WinWindowFinder + WinGUIOperations + WinClipboard
-- macOS:   MacWindowFinder + MacGUIOperations + MacClipboard
-- Linux:   LinuxWindowFinder + LinuxGUIOperations + LinuxClipboard
-
+通过 src/platform 抽象层自动适配当前操作系统。
 对外统一暴露 send_text_message_sync / send_text_message / get_status 接口。
 """
 
@@ -16,14 +12,25 @@ import logging
 import sys
 from typing import Any, Dict, Optional
 
-import pyautogui
+# ⚠️ pyautogui 延迟导入 — 在 macOS Python 3.13 上直接导入
+# 会因 rubicon-objc 的兼容性问题崩溃。只在用到时再导入。
+_pyautogui = None
 
+# 优先尝试相对导入（作为包子模块时），回退到绝对导入（PYTHONPATH=src 时）
 try:
     from .config import Config
     from .platform import create_platform_impl
 except ImportError:
     from config import Config
     from platform import create_platform_impl
+
+
+def _get_pyautogui():
+    """懒加载 pyautogui。"""
+    global _pyautogui
+    if _pyautogui is None:
+        import pyautogui as _pyautogui
+    return _pyautogui
 
 
 class WeChatController:
@@ -41,9 +48,13 @@ class WeChatController:
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.DEBUG)
 
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-        pyautogui.FAILSAFE = True
-        pyautogui.PAUSE = 0.3
+        # 安全包装 stdout（在测试环境中可能已关闭或被重定向）
+        try:
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+        except (ValueError, AttributeError):
+            pass
+
+        self._init_pyautogui()
 
         self._config: Config = config or Config()
         self._platform = sys.platform
@@ -51,19 +62,24 @@ class WeChatController:
         # 通过抽象层创建平台相关的实现
         self._win_finder, self._gui_ops, self._clipboard = create_platform_impl(self._config)
 
-        # 兼容属性（旧代码可能引用）
         self.wechat_version: Optional[str] = None
-        self.is_nt_version: bool = self._platform != "win32"  # 非Windows默认NT
+        self.is_nt_version: bool = self._platform != "win32"
 
         self._detect_wechat_version()
+
+    def _init_pyautogui(self):
+        """安全初始化 pyautogui。"""
+        try:
+            pg = _get_pyautogui()
+            pg.FAILSAFE = True
+            pg.PAUSE = 0.3
+        except Exception as e:
+            self.logger.warning(f"pyautogui 初始化失败（在非 GUI 环境下正常）: {e}")
 
     # ==================== 公共接口 ====================
 
     def send_text_message_sync(self, contact_name: str, message: str) -> Dict[str, Any]:
-        """向指定联系人发送文本消息（同步版本）。
-
-        流程：窗口激活 → 搜索联系人 → 发送消息
-        """
+        """向指定联系人发送文本消息（同步版本）。"""
         result: Dict[str, Any] = {
             "ok": False,
             "contact_name": contact_name,
@@ -76,7 +92,6 @@ class WeChatController:
             version = self._detect_wechat_version()
             result["wechat_version"] = version
 
-            # ── 窗口激活 ──
             window_id = None
             hotkey = self._config.wechat_hotkey
 
@@ -99,7 +114,6 @@ class WeChatController:
                     return result
                 result["activation_method"] = "api"
 
-            # ── 搜索联系人并发送 ──
             if not self._gui_ops.search_contact(contact_name):
                 result["stage"] = "search_contact"
                 result["reason"] = "search_failed"
@@ -122,11 +136,11 @@ class WeChatController:
             return result
 
     async def send_text_message(self, contact_name: str, message: str) -> Dict[str, Any]:
-        """异步发送消息（内部调同步方法）。"""
+        """异步发送消息。"""
         return self.send_text_message_sync(contact_name, message)
 
     async def schedule_message(self, contact_name: str, message: str, delay_seconds: float) -> bool:
-        """安排在延迟后发送消息。"""
+        """安排延迟发送。"""
         try:
             self.logger.info(f"计划 {delay_seconds}s 后发送给 {contact_name}")
 
@@ -162,21 +176,13 @@ class WeChatController:
         return version
 
     def _activate_window_by_hotkey(self, hotkey: str) -> Optional[int]:
-        """通过快捷键激活微信窗口。
-
-        Args:
-            hotkey: 格式如 'ctrl+alt+w'、'command+shift+w'
-
-        Returns:
-            窗口标识符，失败返回 None
-        """
+        """通过快捷键激活微信窗口。"""
         if not hotkey:
             return None
 
         try:
             keys = [k.strip().lower() for k in hotkey.split('+')]
 
-            # 统一快捷键名称
             mapping = {
                 'cmd': 'command', 'command': 'command', '⌘': 'command',
                 'opt': 'alt', 'option': 'alt', '⌥': 'alt',
@@ -186,7 +192,8 @@ class WeChatController:
             normalized = [mapping.get(k, k) for k in keys]
 
             self.logger.info(f"尝试快捷键 [{hotkey}] 激活...")
-            pyautogui.hotkey(*normalized)
+            pg = _get_pyautogui()
+            pg.hotkey(*normalized)
             import time
             time.sleep(0.5)
 

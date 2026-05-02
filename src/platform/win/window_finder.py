@@ -7,10 +7,18 @@ Windows 窗口查找实现 — 封装现有 WindowFinderMixin + TrayManagerMixin
 """
 
 import logging
+import sys
 from typing import Optional, Dict, Any
 
-from ...window_finder import WindowFinderMixin
-from ...tray_manager import TrayManagerMixin
+# 使用 sys.path 导入或绝对导入，避免相对导入在测试环境中出错
+try:
+    from window_finder import WindowFinderMixin
+    from tray_manager import TrayManagerMixin
+except ImportError:
+    # 当从 tests/ 运行时，window_finder 已经在 sys.path（src/）
+    import importlib
+    WindowFinderMixin = importlib.import_module('window_finder').WindowFinderMixin
+    TrayManagerMixin = importlib.import_module('tray_manager').TrayManagerMixin
 
 from ..base import WindowFinder
 
@@ -27,9 +35,12 @@ class WinWindowFinder(WindowFinder, TrayManagerMixin, WindowFinderMixin):
         self._config = config
         self._logger = logging.getLogger(__name__)
 
-        # 初始化自然 GUI 操作（WindowFinderMixin 依赖）
-        from ...anti_ban.natural_gui import NaturalGUIOperations
-        self._natural_gui = NaturalGUIOperations()
+        # 初始化自然 GUI 操作（WindowFinderMixin 和 GUIOperationsMixin 依赖）
+        try:
+            from anti_ban.natural_gui import NaturalGUIOperations
+            self._natural_gui = NaturalGUIOperations()
+        except ImportError:
+            self._natural_gui = None
 
     # ── WindowFinder 接口实现 ──
 
