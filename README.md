@@ -9,7 +9,7 @@
 ![GitHub license](https://img.shields.io/github/license/xlight/wechat-sendmsg)
 ![Python version](https://img.shields.io/badge/python-3.10%2B-blue)
 
-**让AI助手帮你发微信消息的小工具，简单安全易用**
+**让AI助手帮你发微信消息的小工具 — 跨平台版**
 
 [快速开始](#-安装和配置) • [功能特点](#-功能特点) • [使用方法](#-使用方法) • [API文档](#️-可用工具) • [常见问题](#-故障排除)
 
@@ -21,6 +21,7 @@
 
 - [这是什么？](#-这是什么)
 - [能做什么？](#-能做什么)
+- [跨平台支持](#-跨平台支持)
 - [怎么安装？](#-安装和配置)
 - [怎么使用？](#-使用方法)
 - [有哪些功能？](#️-可用工具)
@@ -61,9 +62,9 @@ flowchart TD
 ```
 
 ### 技术实现要点
-1. **快捷键唤醒** - 使用全局快捷键（如 `Ctrl+Alt+W`）激活微信窗口
-2. **剪贴板输入** - 使用Windows剪贴板API输入文本，避免输入法干扰
-3. **快捷键发送** - 模拟键盘快捷键（Enter/Ctrl+Enter/Alt+S）发送消息
+1. **快捷键唤醒** - 使用全局快捷键激活微信窗口
+2. **剪贴板输入** - 使用系统剪贴板API输入文本，避免输入法干扰
+3. **快捷键发送** - 模拟系统键盘快捷键发送消息
 
 ### 重要声明
 - **无逆向工程**：本项目不涉及微信客户端逆向、内存读取、协议分析等行为
@@ -78,11 +79,55 @@ flowchart TD
 
 ------
 
-## 💻 兼容性
+## 💻 跨平台支持
 
-- ✅ **微信版本** - 支持微信 4.0 以上版本
-- ✅ **操作系统** - Windows 10/11 系统
-- ✅ **AI助手** - 支持 Claude、ChatGPT 等AI助手
+### 支持的操作系统
+
+| 平台 | 支持 | 微信版本 | 技术方案 |
+|------|------|---------|---------|
+| 🪟 **Windows** | ✅ 完整支持 | 微信 4.0+ | win32gui + win32clipboard |
+| 🍎 **macOS** | ✅ 完整支持 | 微信 4.0+ | NSWorkspace + NSPasteboard (pyobjc) |
+| 🐧 **Linux** | ✅ 完整支持 | WeChat4Linux / Wine 微信 | xdotool + xclip |
+
+### 三平台快捷键
+
+| 操作 | Windows | macOS | Linux |
+|------|---------|-------|-------|
+| 搜索联系人 | `Ctrl+F` | `Cmd+F` | `Ctrl+F` |
+| 发送消息 | `Alt+S` / `Enter` | `Cmd+Enter` | `Alt+S` / `Enter` |
+| 全选 | `Ctrl+A` | `Cmd+A` | `Ctrl+A` |
+| 粘贴 | `Ctrl+V` | `Cmd+V` | `Ctrl+V` |
+
+### 平台架构
+
+```mermaid
+flowchart LR
+    subgraph 抽象层
+        FAC["platform/__init__.py<br/>工厂函数"]
+        BASE["platform/base.py<br/>抽象接口"]
+        CLIP["platform/clipboard.py<br/>剪贴板代理"]
+    end
+    
+    subgraph WIN["Windows 实现"]
+        WIN_F["win/window_finder.py<br/>win32gui"]
+        WIN_G["win/gui_ops.py<br/>win32clipboard"]
+    end
+    
+    subgraph MAC["macOS 实现"]
+        MAC_F["mac/window_finder.py<br/>NSWorkspace"]
+        MAC_G["mac/gui_ops.py<br/>NSPasteboard"]
+    end
+    
+    subgraph LIN["Linux 实现"]
+        LIN_F["linux/window_finder.py<br/>xdotool"]
+        LIN_G["linux/gui_ops.py<br/>xclip"]
+    end
+    
+    FAC --> BASE & CLIP
+    FAC -.-> WIN & MAC & LIN
+```
+
+------
 
 ## ✨ 能做什么？
 
@@ -104,12 +149,28 @@ flowchart TD
 
 ## 🚀 安装和配置
 
-### 1️⃣ 安装依赖
+### 1️⃣ 安装 Python 依赖
+
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2️⃣ 确保微信已启动并登录
+> 依赖会自动根据当前操作系统安装对应平台的包（Windows 安装 pywin32，macOS 安装 pyobjc，Linux 安装 pyperclip）。
+
+### 2️⃣ Linux 额外系统依赖
+
+如果使用 Linux，还需安装：
+
+```bash
+# Ubuntu / Debian
+sudo apt install xdotool wmctrl xclip
+
+# Arch Linux
+sudo pacman -S xdotool wmctrl xclip
+```
+
+### 3️⃣ 确保微信已启动并登录
+
 - 打开微信并登录你的账号
 - 建议先向"文件传输助手"测试发送
 
@@ -137,13 +198,20 @@ pip install -r requirements.txt
 3. AI助手会自动帮你发送
 
 ### 🧪 直接测试
-1. 运行工具
-2. 打开浏览器访问 `http://localhost:8000`
-3. 在测试页面发送消息
+
+```bash
+# 启动 HTTP 服务器
+python src/mcp_server.py --transport streamable-http --port 8765
+
+# 发送测试消息
+curl -X POST http://localhost:8765/api/v1/messages/send \
+  -H "Content-Type: application/json" \
+  -d '{"contact_name": "文件传输助手", "message": "你好！"}'
+```
 
 ### 🌐 网页管理
-- **首页**：`http://localhost:8000` - 简单测试页面
-- **队列管理**：`http://localhost:8000/queue` - 查看和管理消息队列
+- **首页**：`http://localhost:8765` - 简单测试页面
+- **队列管理**：`http://localhost:8765/queue` - 查看和管理消息队列
 
 ## ⚠️ 注意事项
 
@@ -165,12 +233,14 @@ pip install -r requirements.txt
 ### ❌ 找不到微信窗口
 - ✅ 确保微信已启动并登录
 - ✅ 检查微信窗口是否可见
+- ✅ Linux 用户确保已安装 xdotool
 - ✅ 尝试重启微信
 
 ### ❌ 消息发送失败
 - ✅ 检查网络连接
 - ✅ 确认联系人名称正确
 - ✅ 微信窗口是否被遮挡
+- ✅ 查看日志文件了解详细错误
 
 ### ❌ 其他问题
 - ✅ 查看日志文件了解详细错误
@@ -260,15 +330,12 @@ pip install -r requirements.txt
 
 ---
 
-## 📈 项目统计
+## 📈 项目数据
 
-### ⭐ Star 增长趋势
-感谢大家的支持！
-
-### 📊 项目数据
-- 版本：1.0.0
-- 更新：持续维护中
-- 状态：稳定可用
+- **版本**：1.2.0
+- **更新**：持续维护中
+- **状态**：稳定可用
+- **支持平台**：Windows / macOS / Linux
 
 ---
 
@@ -279,6 +346,7 @@ pip install -r requirements.txt
 - [🔧 技术实现文档](docs/TECHNICAL_IMPLEMENTATION.md) - 详细的技术原理和架构
 - [🚀 快速开始指南](docs/QUICK_START.md) - 完整的安装配置步骤
 - [🛡️ 防封号指南](docs/AVOID_BAN.md) - 安全使用建议
+- [🌐 跨平台指南](docs/CROSS_PLATFORM_GUIDE.md) - 各平台使用说明
 
 **温馨提示：** 本工具仅为技术演示，请合理使用。如有疑问，请先阅读文档或加入QQ群交流。
 
