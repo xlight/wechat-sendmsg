@@ -9,7 +9,10 @@ import logging
 import os
 from typing import Any, Dict, List, Optional
 
-from paths import get_config_path, get_db_path
+try:
+    from .paths import get_config_path, get_db_path
+except ImportError:
+    from paths import get_config_path, get_db_path
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +38,9 @@ DEFAULTS: Dict[str, Any] = {
     "suffix_probability": 0.05,
     "random_skip_probability": 0.2,
     # 微信快捷键配置
-    "wechat_hotkey": "ctrl+alt+w",  # 激活微信窗口的快捷键（需在微信设置中配置）
+    "wechat_hotkey": "ctrl+alt+w",  # 激活微信窗口的快捷键
+    # Windows: 需在微信设置中配置快捷键
+    # macOS: 可用系统快捷键（如 Cmd+Shift+W），或留空使用 API 方式
     # 防封号配置 - GUI 操作
     "gui_offset_range": 3,
     "gui_move_duration_min": 0.1,
@@ -46,6 +51,9 @@ DEFAULTS: Dict[str, Any] = {
     "queue_db_path": "",  # 空字符串表示使用 paths 模块计算的默认路径
     "queue_max_retries": 3,
     "queue_poll_interval": 1.0,
+    # macOS 微信配置
+    "mac_wechat_hotkey": "command+shift+w",  # macOS 快捷键（可留空）
+    "mac_send_shortcut": "command+enter",    # macOS 发送快捷键（默认 Cmd+Enter）
 }
 
 # 配置文件默认路径（通过 paths 模块计算）
@@ -166,6 +174,15 @@ class Config:
         """队列 Worker 轮询间隔（秒）。"""
         return float(self._data.get("queue_poll_interval", DEFAULTS["queue_poll_interval"]))
 
+    @property
+    def mac_wechat_hotkey(self) -> str:
+        """macOS 激活微信窗口的快捷键。"""
+        return str(self._data.get("mac_wechat_hotkey", DEFAULTS["mac_wechat_hotkey"]))
+
+    @property
+    def mac_send_shortcut(self) -> str:
+        """macOS 发送消息的快捷键（默认 Cmd+Enter）。"""
+        return str(self._data.get("mac_send_shortcut", DEFAULTS["mac_send_shortcut"]))
 
     # ------------------------------------------------------------------
     # 序列化 / 反序列化

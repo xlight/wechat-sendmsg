@@ -5,3 +5,8 @@ psutil>=5.9.0
 mcp[cli]>=1.0.0
 pystray>=0.2.8
 Pillow>=9.0.0
+
+# macOS 依赖（通过环境标记仅在 darwin 平台安装）
+pyobjc-core>=10.0; sys_platform == 'darwin'
+pyobjc-framework-Cocoa>=10.0; sys_platform == 'darwin'
+pyobjc-framework-Quartz>=10.0; sys_platform == 'darwin'

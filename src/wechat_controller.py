@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """
 微信控制器
-处理微信自动化发送消息功能。
-仅支持 NT 架构（WeChat 4.0+）；低于 4.0 的版本直接跳过。
+处理微信自动化发送消息功能。跨平台支持 Windows 和 macOS。
 
-通过 Mixin 模式组合各功能模块：
-- TrayManagerMixin: 系统托盘图标查找与恢复
-- WindowFinderMixin: 窗口查找、版本检测、窗口激活
-- GUIOperationsMixin: 剪贴板操作、输入框交互、联系人搜索、消息发送
+通过平台抽象层 (platform/) 自动选择当前系统的具体实现：
+- Windows: WinWindowFinder + WinGUIOperations（复用现有 Mixin）
+- macOS: MacWindowFinder + MacGUIOperations（pyobjc + NSPasteboard）
+
+两种激活窗口方式（按优先级）：
+1. 快捷键激活（需在微信设置中配置）
+2. API 查找并激活窗口
 """
 
 import asyncio
@@ -17,33 +19,27 @@ import sys
 from typing import Any, Dict, Optional
 
 import pyautogui
-import win32gui
 
 try:
-    from .tray_manager import TrayManagerMixin
-    from .window_finder import WindowFinderMixin
-    from .gui_operations import GUIOperationsMixin
-    from .anti_ban import NaturalGUIOperations
     from .config import Config
+    from .platform import create_platform_impl
+    from .anti_ban import NaturalGUIOperations
 except ImportError:
-    from tray_manager import TrayManagerMixin
-    from window_finder import WindowFinderMixin
-    from gui_operations import GUIOperationsMixin
-    from anti_ban import NaturalGUIOperations
     from config import Config
+    from platform import create_platform_impl
+    from anti_ban import NaturalGUIOperations
 
 
-class WeChatController(TrayManagerMixin, WindowFinderMixin, GUIOperationsMixin):
-    """微信自动化操作控制器（仅 NT 版本）。
+class WeChatController:
+    """跨平台微信自动化操作控制器。
 
-    继承顺序决定 MRO：TrayManagerMixin -> WindowFinderMixin -> GUIOperationsMixin
-    - TrayManagerMixin 提供托盘恢复功能，被 WindowFinderMixin 调用
-    - WindowFinderMixin 提供窗口查找和激活，被 GUIOperationsMixin 调用
-    - GUIOperationsMixin 提供搜索联系人和发送消息功能
+    通过平台抽象层组合窗口查找和 GUI 操作组件：
+    - window_finder: 窗口查找、激活、版本检测（平台相关）
+    - gui_ops: 搜索联系人、发送消息、剪贴板操作（平台相关）
     """
 
     def __init__(self, config: Optional[Config] = None):
-        # 设置日志级别为DEBUG
+        # 设置日志
         logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.DEBUG)
@@ -53,17 +49,25 @@ class WeChatController(TrayManagerMixin, WindowFinderMixin, GUIOperationsMixin):
         pyautogui.FAILSAFE = True
         pyautogui.PAUSE = 0.3
 
-        self.wechat_version: Optional[str] = None
-        self.is_nt_version: bool = False
-        self._last_window_kind: Optional[str] = None
-
-        # 加载配置（支持外部传入，默认自动加载 config.json）
+        # 加载配置
         self._config: Config = config or Config()
 
-        # 初始化自然 GUI 操作工具
+        # 初始化自然 GUI 操作工具（跨平台，仅用于 Windows，macOS 忽略）
         self._natural_gui = NaturalGUIOperations()
 
+        # ── 平台抽象层 ──
+        self._win_finder, self._gui_ops = create_platform_impl(self._config)
+        self._platform = sys.platform
+
+        # ── 兼容属性（供现有代码引用） ──
+        self.wechat_version: Optional[str] = None
+        self.is_nt_version: bool = True  # macOS 微信均为 4.x+，Windows 由 _win_finder 决定
+        self._last_window_kind: Optional[str] = None
+
+        # 检测版本
         self._detect_wechat_version()
+
+    # ==================== 公共接口 ====================
 
     def send_text_message_sync(self, contact_name: str, message: str) -> Dict[str, Any]:
         """向指定联系人发送文本消息（同步版本）。
@@ -71,8 +75,8 @@ class WeChatController(TrayManagerMixin, WindowFinderMixin, GUIOperationsMixin):
         该方法为纯同步方法，供 QueueWorker 通过 run_in_executor 调用。
 
         激活窗口的优先级：
-        1. 通过配置的快捷键激活微信窗口（需用户在微信设置中配置）
-        2. 快捷键失败时回退到 Win32 API 查找并激活窗口
+        1. 通过配置的快捷键激活微信窗口
+        2. 快捷键失败时回退到平台 API 查找并激活窗口
         """
         result: Dict[str, Any] = {
             "ok": False,
@@ -87,63 +91,47 @@ class WeChatController(TrayManagerMixin, WindowFinderMixin, GUIOperationsMixin):
         try:
             version = self._detect_wechat_version()
             result["wechat_version"] = version
-            result["is_nt_framework"] = self.is_nt_version
 
-            if not self.is_nt_version:
-                result["stage"] = "version_check"
-                result["reason"] = "non_nt_version_skipped"
-                return result
+            if self._platform == "win32":
+                result["is_nt_framework"] = self.is_nt_version
+                if not self.is_nt_version:
+                    result["stage"] = "version_check"
+                    result["reason"] = "non_nt_version_skipped"
+                    return result
+            else:
+                result["is_nt_framework"] = True
 
             # ── 窗口激活：优先使用快捷键 ──
-            hwnd = None
+            window_id = None
             hotkey = self._config.wechat_hotkey
-            hwnd = self._activate_window_by_hotkey(hotkey)
+            window_id = self._activate_window_by_hotkey(hotkey)
 
-            if hwnd:
+            if window_id:
                 result["activation_method"] = "hotkey"
-                self.logger.info(f"快捷键 [{hotkey}] 激活成功，使用 hwnd={hwnd}")
+                self.logger.info(f"快捷键 [{hotkey}] 激活成功，window_id={window_id}")
             else:
-                # 快捷键失败，回退到 Win32 API
-                self.logger.info("快捷键激活失败，回退到 Win32 API 方式")
-                hwnd = self._find_wechat_window()
-                if not hwnd:
+                # 快捷键失败，回退到平台 API
+                self.logger.info("快捷键激活失败，回退到平台 API 方式")
+                window_id = self._win_finder.find_wechat_window()
+                if not window_id:
                     result["stage"] = "find_window"
                     result["reason"] = "wechat_window_not_found"
                     return result
 
-                if not self._activate_window(hwnd):
+                if not self._win_finder.activate_window(window_id):
                     result["stage"] = "activate_window"
                     result["reason"] = "failed_to_activate_window"
                     return result
-                result["activation_method"] = "win32api"
-
-            # ── 窗口大小检查 ──
-            try:
-                rect = win32gui.GetWindowRect(hwnd)
-                window_width = rect[2] - rect[0]
-                window_height = rect[3] - rect[1]
-
-                MIN_WINDOW_WIDTH = 600
-                MIN_WINDOW_HEIGHT = 400
-
-                if window_width < MIN_WINDOW_WIDTH or window_height < MIN_WINDOW_HEIGHT:
-                    self.logger.warning(
-                        f"微信窗口尺寸过小 ({window_width}x{window_height})，"
-                        f"建议至少 {MIN_WINDOW_WIDTH}x{MIN_WINDOW_HEIGHT}，"
-                        f"可能导致输入框定位失败"
-                    )
-                    result["window_size"] = f"{window_width}x{window_height}"
-                    result["window_warning"] = "window_too_small"
-            except Exception as e:
-                self.logger.debug(f"检查窗口大小时出错: {e}")
+                result["activation_method"] = "api"
 
             # ── 搜索联系人并发送消息 ──
-            if not self._search_contact_nt(contact_name):
+            if not self._gui_ops.search_contact(contact_name):
                 result["stage"] = "search_contact"
                 result["reason"] = "search_failed"
                 return result
+
             self.logger.debug("联系人已打开，准备发送消息...")
-            if self._send_text_nt(message):
+            if self._gui_ops.send_text(message):
                 result["ok"] = True
                 result["stage"] = "send_text"
                 result["reason"] = None
@@ -154,7 +142,7 @@ class WeChatController(TrayManagerMixin, WindowFinderMixin, GUIOperationsMixin):
             return result
 
         except Exception as e:
-            self.logger.error(f"Error sending message: {e}")
+            self.logger.error(f"发送消息出错: {e}")
             result["stage"] = result["stage"] or "exception"
             result["reason"] = str(e)
             return result
@@ -169,41 +157,93 @@ class WeChatController(TrayManagerMixin, WindowFinderMixin, GUIOperationsMixin):
     async def schedule_message(self, contact_name: str, message: str, delay_seconds: float) -> bool:
         """安排在延迟后发送消息。"""
         try:
-            self.logger.info(f"Scheduling message to {contact_name} in {delay_seconds} seconds")
+            self.logger.info(f"计划在 {delay_seconds} 秒后发送消息给 {contact_name}")
 
             async def delayed_send():
                 await asyncio.sleep(delay_seconds)
-                # 调用异步函数
                 try:
                     await self.send_text_message(contact_name, message)
                 except Exception as e:
-                    self.logger.error(f"Error in delayed send: {e}")
+                    self.logger.error(f"延迟发送出错: {e}")
 
-            # 创建异步任务
             asyncio.create_task(delayed_send())
-
             return True
 
         except Exception as e:
-            self.logger.error(f"Error scheduling message: {e}")
+            self.logger.error(f"计划消息失败: {e}")
             return False
 
     def get_status(self) -> Dict[str, Any]:
         """获取微信控制器的当前状态。"""
         try:
-            version = self._detect_wechat_version()
-            hwnd = self._find_wechat_window()
-            return {
-                "wechat_available": hwnd is not None,
-                "window_handle": hwnd,
-                "wechat_version": version,
-                "is_nt_framework": self.is_nt_version,
-                "supported": self.is_nt_version,
-                "framework_type": "NT framework (4.0+)" if self.is_nt_version else "Legacy (<4.0, skipped)"
-            }
+            return self._win_finder.get_status()
         except Exception as e:
-            self.logger.error(f"Error checking status: {e}")
-            return {
-                "wechat_available": False,
-                "error": str(e)
-            }
+            self.logger.error(f"获取状态失败: {e}")
+            return {"wechat_available": False, "error": str(e)}
+
+    # ==================== 内部方法 ====================
+
+    def _detect_wechat_version(self) -> Optional[str]:
+        """检测微信版本号。
+
+        Returns:
+            版本号字符串，检测失败返回 None
+        """
+        version = self._win_finder.detect_wechat_version()
+        self.wechat_version = version
+        if hasattr(self._win_finder, 'is_nt_version'):
+            self.is_nt_version = self._win_finder.is_nt_version
+        return version
+
+    def _activate_window_by_hotkey(self, hotkey: str = "ctrl+alt+w") -> Optional[int]:
+        """通过快捷键激活微信窗口。
+
+        跨平台通用实现，依赖 pyautogui.hotkey()。
+        Windows 上快捷键需在微信设置中配置；macOS 上使用系统级快捷键。
+
+        Args:
+            hotkey: 快捷键字符串，如 'ctrl+alt+w'，'+' 分隔
+
+        Returns:
+            窗口标识符（Windows hwnd / macOS PID），失败返回 None
+        """
+        if not hotkey:
+            self.logger.warning("快捷键配置为空")
+            return None
+
+        try:
+            keys = [k.strip().lower() for k in hotkey.split('+')]
+            self.logger.info(f"尝试通过快捷键 [{hotkey}] 激活微信窗口...")
+
+            # 将 macOS 的 command 键映射到 pyautogui
+            normalized_keys = []
+            for k in keys:
+                if k in ('cmd', 'command', '⌘'):
+                    normalized_keys.append('command')
+                elif k in ('opt', 'option', 'alt', '⌥'):
+                    normalized_keys.append('alt')
+                elif k in ('ctrl', 'control', '^'):
+                    normalized_keys.append('ctrl')
+                elif k in ('shift', '⇧'):
+                    normalized_keys.append('shift')
+                else:
+                    normalized_keys.append(k)
+
+            pyautogui.hotkey(*normalized_keys)
+
+            # 等待窗口激活
+            import time
+            time.sleep(0.5)
+
+            # 检查窗口是否已激活
+            window_id = self._win_finder.find_wechat_window()
+            if window_id:
+                self.logger.info(f"快捷键 [{hotkey}] 激活微信窗口成功")
+                return window_id
+
+            self.logger.debug("快捷键激活后未检测到微信窗口")
+            return None
+
+        except Exception as e:
+            self.logger.debug(f"快捷键激活微信窗口出错: {e}")
+            return None
