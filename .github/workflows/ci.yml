@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master, develop ]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: 测试 (${{ matrix.os }} / Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ['3.10', '3.11', '3.12']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: 安装系统依赖（Linux）
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xdotool wmctrl xclip
+
+      - name: 安装 Python 依赖
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 检查代码语法
+        run: |
+          python -m py_compile src/*.py
+          python -m py_compile src/platform/*.py
+          python -m py_compile src/platform/*/ *.py
+          python -m py_compile src/anti_ban/*.py
+
+      - name: 检查测试语法
+        run: python -m py_compile tests/*.py
+
+      - name: 运行测试
+        run: |
+          python -m unittest discover -s tests -p "test_*.py" -v
+        env:
+          PYTHONPATH: src
+          # 避免 GUI 操作在 CI 中阻塞
+          DISPLAY: ':99'  # Linux
+          PYTHONUNBUFFERED: 1
+
+      - name: 上传测试报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: |
+            tests/test_output.txt
+          retention-days: 7
+
+  lint:
+    name: 代码风格检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 安装依赖
+        run: |
+          pip install flake8 mypy types-setuptools
+
+      - name: flake8 检查
+        run: |
+          flake8 src/ tests/ --max-line-length=120 \
+            --extend-ignore=E402,W503,F841 \
+            --exclude=src/anti_ban
+
+      - name: mypy 类型检查
+        run: |
+          mypy src/ --ignore-missing-imports --follow-imports=silent \
+            --exclude 'src/anti_ban/natural_gui.py' \
+            --exclude 'src/platform/'
+        continue-on-error: true  # mypy 作为警告，不阻断
