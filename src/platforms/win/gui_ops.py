@@ -16,9 +16,13 @@ _w32cb = None
 
 try:
     from gui_operations import GUIOperationsMixin
+    from window_finder import WindowFinderMixin
+    from tray_manager import TrayManagerMixin
 except ImportError:
     import importlib
     GUIOperationsMixin = importlib.import_module('gui_operations').GUIOperationsMixin
+    WindowFinderMixin = importlib.import_module('window_finder').WindowFinderMixin
+    TrayManagerMixin = importlib.import_module('tray_manager').TrayManagerMixin
 
 from ..base import GUIOperations
 
@@ -39,7 +43,7 @@ def _get_cb():
     return _w32cb
 
 
-class WinGUIOperations(GUIOperations, GUIOperationsMixin):
+class WinGUIOperations(GUIOperations, GUIOperationsMixin, WindowFinderMixin, TrayManagerMixin):
     """Windows 平台的 GUI 操作实现。"""
 
     def __init__(self, config: object = None):
