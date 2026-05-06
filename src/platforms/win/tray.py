@@ -42,8 +42,7 @@ class WinTrayManager(TrayManager):
         self._icon.run()
 
     def _exit_platform(self) -> None:
-        """停止 pystray 图标。"""
-        logger.info("用户请求退出...")
+        """停止 pystray 图标并关闭服务器。"""
         self.stop()
         if self._icon is not None:
             self._icon.stop()

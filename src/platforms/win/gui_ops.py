@@ -45,6 +45,7 @@ class WinGUIOperations(GUIOperations, GUIOperationsMixin):
     def __init__(self, config: object = None):
         self._config = config
         self._logger = logging.getLogger(__name__)
+        self.logger = self._logger  # 兼容 GUIOperationsMixin 使用的 self.logger
 
         # 初始化自然 GUI 操作（GUIOperationsMixin 依赖）
         try:

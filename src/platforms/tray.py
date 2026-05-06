@@ -159,3 +159,8 @@ class TrayManager(ABC):
     def _on_open_web(self, *args) -> None:
         """打开管理页面。"""
         webbrowser.open(f"http://localhost:{self._port}")
+
+    def _on_exit(self, *args) -> None:
+        """退出应用。"""
+        logger.info("用户请求退出...")
+        self._exit_platform()

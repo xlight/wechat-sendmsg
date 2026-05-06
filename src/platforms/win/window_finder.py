@@ -34,6 +34,7 @@ class WinWindowFinder(WindowFinder, TrayManagerMixin, WindowFinderMixin):
     def __init__(self, config: object = None):
         self._config = config
         self._logger = logging.getLogger(__name__)
+        self.logger = self._logger  # 兼容 WindowFinderMixin 使用的 self.logger
 
         # 初始化自然 GUI 操作（WindowFinderMixin 和 GUIOperationsMixin 依赖）
         try:
