@@ -575,35 +575,42 @@ def create_starlette_app() -> Starlette:
     # 获取 MCP 的 streamable HTTP ASGI 子应用
     mcp_app = mcp.streamable_http_app()
 
-    # 从 mcp_app 中提取 StreamableHTTPASGIApp 端点
-    # mcp_app 内部有一个 Route("/", endpoint=StreamableHTTPASGIApp)
-    # 我们直接将它注册到顶层的 /mcp 路由，避免 Mount 导致的 307 重定向
-    mcp_endpoint = mcp_app.routes[0].endpoint
+    # 兼容新版 MCP SDK：streamable_http_app 返回的可能是 Mount 或 Route
+    # Route 有 .endpoint 属性，Mount 有 .app 属性
+    first_route = mcp_app.routes[0]
+    if hasattr(first_route, 'endpoint'):
+        mcp_endpoint = first_route.endpoint
+    elif hasattr(first_route, 'app'):
+        mcp_endpoint = first_route.app
+    else:
+        # 回退：直接使用 Mount 对象，接受 307 重定向
+        mcp_endpoint = None
 
     # 项目根目录下的 static 文件夹
     static_dir = get_static_dir()
 
     # 构建路由
-    routes = [
-        # MCP Streamable HTTP 端点 — 直接注册避免 Mount 的尾斜杠重定向
-        Route("/mcp", endpoint=mcp_endpoint),
-        # HTTP API 端点 — 消息发送
+    routes = []
+    
+    if mcp_endpoint is not None:
+        routes.append(Route("/mcp", endpoint=mcp_endpoint))
+    else:
+        routes.append(Mount("/mcp", app=first_route.app))
+
+    routes.extend([
         Route("/api/v1/messages/send", handle_send_message, methods=["POST"]),
-        # HTTP API 端点 — 队列管理
         Route("/api/v1/queue/status", handle_queue_status, methods=["GET"]),
         Route("/api/v1/queue/messages", handle_queue_messages, methods=["GET"]),
         Route("/api/v1/queue/messages/{id:int}", handle_queue_message_detail, methods=["GET"]),
         Route("/api/v1/queue/messages/{id:int}/cancel", handle_queue_cancel, methods=["POST"]),
         Route("/api/v1/queue/messages/{id:int}/retry", handle_queue_retry, methods=["POST"]),
-        # HTTP API 端点 — 状态与配置
         Route("/api/v1/status", handle_status, methods=["GET"]),
         Route("/api/v1/anti-ban/stats", handle_anti_ban_stats, methods=["GET"]),
         Route("/api/v1/anti-ban/config", handle_anti_ban_config, methods=["GET"]),
-        # 页面路由
         Route("/", handle_index, methods=["GET"]),
         Route("/test", handle_test_page, methods=["GET"]),
         Route("/queue", handle_queue_page, methods=["GET"]),
-    ]
+    ])
 
     # 静态文件服务（如果目录存在）
     if os.path.isdir(static_dir):
@@ -743,11 +750,11 @@ def main():
 
         if args.systray:
             # 系统托盘模式：后台线程运行 uvicorn，主线程运行托盘图标
-            from systray_app import SystrayApp
+            from platforms import create_tray_manager
 
             logger.info("以系统托盘模式启动...")
-            systray = SystrayApp(app=app, host=host, port=port)
-            systray.run()
+            tray = create_tray_manager(app, host=host, port=port)
+            tray.run()
         else:
             # 控制台模式：uvicorn 直接阻塞主线程
             uvicorn.run(app, host=host, port=port, log_level="info")

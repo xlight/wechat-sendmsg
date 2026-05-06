@@ -19,10 +19,10 @@ _pyautogui = None
 # 优先尝试相对导入（作为包子模块时），回退到绝对导入（PYTHONPATH=src 时）
 try:
     from .config import Config
-    from ._platform import create_platform_impl
+    from .platforms import create_platform_impl
 except ImportError:
     from config import Config
-    from _platform import create_platform_impl
+    from platforms import create_platform_impl
 
 
 def _get_pyautogui():
