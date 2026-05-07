@@ -1,0 +1,36 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+addopts = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "src/anti_ban/natural_gui.py",
+    "src/systray_app.py",
+    "src/platforms/*/tray.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 60
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.",
+    "if TYPE_CHECKING:",
+    "pass",
+]
+
+[tool.coverage.xml]
+output = "coverage.xml"
+
+[tool.flake8]
+max-line-length = 120
+extend-ignore = ["E402", "W503", "F841"]
+exclude = ["src/anti_ban"]
+
+[tool.mypy]
+ignore_missing_imports = true
+follow_imports = "silent"
+exclude = ["src/anti_ban/natural_gui.py", "src/platform/"]

@@ -39,6 +39,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
+          pip install -r requirements-dev.txt
 
       - name: 检查代码语法
         shell: bash
@@ -95,3 +96,48 @@ jobs:
             --exclude 'src/anti_ban/natural_gui.py' \
             --exclude 'src/platform/'
         continue-on-error: true  # mypy 作为警告，不阻断
+
+  coverage:
+    name: 测试覆盖率
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: 安装系统依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xdotool wmctrl xclip
+
+      - name: 安装 Python 依赖
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: 运行测试 + 覆盖率
+        run: |
+          pytest tests/ --cov=src --cov-report=xml --cov-report=term-missing -v
+        env:
+          PYTHONPATH: src
+          DISPLAY: ':99'
+
+      - name: 上传覆盖率报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+          retention-days: 30
+
+      # 可选：Codecov 集成（需要配置 CODECOV_TOKEN）
+      # - name: 上传到 Codecov
+      #   uses: codecov/codecov-action@v4
+      #   with:
+      #     file: coverage.xml
+      #     fail_ci_if_error: false
