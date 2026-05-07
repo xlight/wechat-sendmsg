@@ -41,14 +41,13 @@ jobs:
           pip install -r requirements.txt
 
       - name: 检查代码语法
+        shell: bash
         run: |
-          python -m py_compile src/*.py
-          python -m py_compile src/platform/*.py
-          python -m py_compile src/platform/*/ *.py
-          python -m py_compile src/anti_ban/*.py
+          find src -name "*.py" -exec python -m py_compile {} \;
 
       - name: 检查测试语法
-        run: python -m py_compile tests/*.py
+        shell: bash
+        run: find tests -name "*.py" -exec python -m py_compile {} \;
 
       - name: 运行测试
         run: |
