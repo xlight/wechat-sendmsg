@@ -205,8 +205,6 @@ async def get_message_detail(message_id: int) -> str:
     Args:
         message_id: 消息 ID
     """
-    global _message_queue
-
     if _message_queue is None:
         return "消息队列未初始化"
 

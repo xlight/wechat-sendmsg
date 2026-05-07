@@ -7,7 +7,6 @@ macOS 菜单栏实现 — NSStatusBar (pyobjc)
 """
 
 import logging
-from typing import Optional
 
 from ..tray import TrayManager, APP_NAME
 

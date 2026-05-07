@@ -6,7 +6,7 @@
 import os
 import unittest
 import tempfile
-from unittest.mock import patch, MagicMock, PropertyMock
+from unittest.mock import MagicMock
 
 
 def _create_temp_db():

@@ -9,7 +9,9 @@ import sys
 import unittest
 from unittest.mock import patch, MagicMock
 
+
 # ── 平台检测 ──
+
 
 def is_platform(name: str) -> bool:
     return sys.platform == name

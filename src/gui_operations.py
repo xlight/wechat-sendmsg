@@ -7,7 +7,7 @@ GUI 操作模块
 import logging
 import time
 from contextlib import contextmanager
-from typing import Generator, Optional, Protocol
+from typing import Iterator, Optional, Protocol
 
 
 class _NaturalGUIProtocol(Protocol):
@@ -44,7 +44,7 @@ class _ClipboardManager:
         self._logger = logger
 
     @contextmanager
-    def _open(self) -> Generator[None, None, None]:
+    def _open(self) -> Iterator[None]:
         """上下文管理器：安全打开和关闭剪贴板。"""
         import win32clipboard
         win32clipboard.OpenClipboard()
