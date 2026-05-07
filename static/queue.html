@@ -537,8 +537,8 @@
         <header>
             <h1>WeChat MCP Server - 队列管理</h1>
             <div class="nav-links">
-                <a href="/" class="nav-link">返回首页</a>
-                <a href="/test" class="nav-link">测试工具</a>
+                <a href="./" class="nav-link">返回首页</a>
+                <a href="./test" class="nav-link">测试工具</a>
             </div>
         </header>
 
@@ -661,7 +661,7 @@
 
         // ── 加载统计 ──
         function loadStats() {
-            fetch('/api/v1/queue/status')
+            fetch('./api/v1/queue/status')
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     if (!data.ok) return;
@@ -682,7 +682,7 @@
         // ── 加载消息列表 ──
         function loadMessages() {
             var status = document.getElementById('statusFilter').value;
-            var url = '/api/v1/queue/messages?limit=' + PAGE_SIZE + '&offset=' + currentOffset;
+            var url = './api/v1/queue/messages?limit=' + PAGE_SIZE + '&offset=' + currentOffset;
             if (status) {
                 url += '&status=' + status;
             }
@@ -807,7 +807,7 @@
 
         // ── 取消/重试操作 ──
         function cancelMessage(id) {
-            fetch('/api/v1/queue/messages/' + id + '/cancel', { method: 'POST' })
+            fetch('./api/v1/queue/messages/' + id + '/cancel', { method: 'POST' })
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     if (data.ok) {
@@ -823,7 +823,7 @@
         }
 
         function retryMessage(id) {
-            fetch('/api/v1/queue/messages/' + id + '/retry', { method: 'POST' })
+            fetch('./api/v1/queue/messages/' + id + '/retry', { method: 'POST' })
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     if (data.ok) {
@@ -841,7 +841,7 @@
         // ── 消息详情弹窗 ──
         function showDetail(id) {
             currentDetailId = id;
-            fetch('/api/v1/queue/messages/' + id)
+            fetch('./api/v1/queue/messages/' + id)
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     if (!data.ok) {

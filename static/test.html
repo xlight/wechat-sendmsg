@@ -355,7 +355,7 @@
         <header>
             <h1>WeChat MCP Server - 测试工具</h1>
             <div class="nav-links">
-                <a href="/" class="nav-link">返回首页</a>
+                <a href="./" class="nav-link">返回首页</a>
             </div>
         </header>
 
@@ -518,7 +518,7 @@
 
             switch (func) {
                 case 'send_message':
-                    url = '/api/v1/messages/send';
+                    url = './api/v1/messages/send';
                     method = 'POST';
                     body = {
                         contact_name: document.getElementById('contactName').value,
@@ -530,13 +530,13 @@
                     }
                     break;
                 case 'status':
-                    url = '/api/v1/status';
+                    url = './api/v1/status';
                     break;
                 case 'anti_ban_stats':
-                    url = '/api/v1/anti-ban/stats';
+                    url = './api/v1/anti-ban/stats';
                     break;
                 case 'anti_ban_config':
-                    url = '/api/v1/anti-ban/config';
+                    url = './api/v1/anti-ban/config';
                     break;
             }
 
