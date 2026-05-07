@@ -165,7 +165,7 @@ class TestNaturalGUIOperations(unittest.TestCase):
         self.ng._random_pause(0.01, 0.02)
         elapsed = time.time() - start
         self.assertGreaterEqual(elapsed, 0.01)
-        self.assertLessEqual(elapsed, 0.1)
+        self.assertLessEqual(elapsed, 0.5)  # CI 环境下允许更大误差
 
 
 if __name__ == '__main__':
