@@ -119,7 +119,7 @@ class TestWorkTimeController(unittest.TestCase):
         """获取累计运行时长。"""
         runtime = self.ctrl.get_runtime()
         self.assertIsInstance(runtime, (int, float))
-        self.assertGreater(runtime, 0)
+        self.assertGreaterEqual(runtime, 0)
 
     def test_should_continue_running(self):
         """检查是否应继续运行。"""

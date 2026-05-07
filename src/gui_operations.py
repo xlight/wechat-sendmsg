@@ -7,7 +7,7 @@ GUI 操作模块
 import logging
 import time
 from contextlib import contextmanager
-from typing import Optional, Protocol
+from typing import Generator, Optional, Protocol
 
 
 class _NaturalGUIProtocol(Protocol):
