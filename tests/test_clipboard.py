@@ -83,90 +83,72 @@ class TestClipboardManager(unittest.TestCase):
 
         self.logger = logging.getLogger('test')
         self.cm = _ClipboardManager(self.logger)
+        # 创建 win32clipboard mock
+        self.mock_cb = MagicMock()
+        self.mock_cb.OpenClipboard = MagicMock()
+        self.mock_cb.CloseClipboard = MagicMock()
+        self.mock_cb.EmptyClipboard = MagicMock()
+        self.mock_cb.SetClipboardData = MagicMock()
+        self.mock_cb.GetClipboardData = MagicMock()
+        self.mock_cb.SetClipboardText = MagicMock()
+        self.mock_cb.CF_UNICODETEXT = 13
 
-    @patch('gui_operations.win32clipboard', create=True)
-    def test_backup_success(self, mock_cb):
+    def test_backup_success(self):
         """成功备份剪贴板内容。"""
-        mock_cb.OpenClipboard = MagicMock()
-        mock_cb.CloseClipboard = MagicMock()
-        mock_cb.GetClipboardData = MagicMock(return_value="test content")
-        mock_cb.CF_UNICODETEXT = 13
+        self.mock_cb.GetClipboardData.return_value = "test content"
 
-        result = self.cm.backup()
-        self.assertEqual(result, "test content")
+        with patch.dict('sys.modules', {'win32clipboard': self.mock_cb}):
+            result = self.cm.backup()
+            self.assertEqual(result, "test content")
 
-    @patch('gui_operations.win32clipboard', create=True)
-    def test_backup_empty(self, mock_cb):
+    def test_backup_empty(self):
         """空剪贴板备份返回 None。"""
-        mock_cb.OpenClipboard = MagicMock()
-        mock_cb.CloseClipboard = MagicMock()
-        mock_cb.GetClipboardData = MagicMock(side_effect=Exception("no data"))
-        mock_cb.CF_UNICODETEXT = 13
+        self.mock_cb.GetClipboardData.side_effect = Exception("no data")
 
-        result = self.cm.backup()
-        self.assertIsNone(result)
+        with patch.dict('sys.modules', {'win32clipboard': self.mock_cb}):
+            result = self.cm.backup()
+            self.assertIsNone(result)
 
-    @patch('gui_operations.win32clipboard', create=True)
-    def test_restore_success(self, mock_cb):
+    def test_restore_success(self):
         """成功恢复剪贴板内容。"""
-        mock_cb.OpenClipboard = MagicMock()
-        mock_cb.CloseClipboard = MagicMock()
-        mock_cb.EmptyClipboard = MagicMock()
-        mock_cb.SetClipboardText = MagicMock()
-        mock_cb.CF_UNICODETEXT = 13
+        with patch.dict('sys.modules', {'win32clipboard': self.mock_cb}):
+            result = self.cm.restore("test content")
+            self.assertTrue(result)
 
-        result = self.cm.restore("test content")
-        self.assertTrue(result)
-
-    @patch('gui_operations.win32clipboard', create=True)
-    def test_restore_none(self, mock_cb):
+    def test_restore_none(self):
         """恢复 None 内容不执行操作。"""
         result = self.cm.restore(None)
         self.assertTrue(result)
-        mock_cb.OpenClipboard.assert_not_called()
+        self.mock_cb.OpenClipboard.assert_not_called()
 
-    @patch('gui_operations.win32clipboard', create=True)
-    def test_set_text_success(self, mock_cb):
+    def test_set_text_success(self):
         """成功设置剪贴板文本。"""
-        mock_cb.OpenClipboard = MagicMock()
-        mock_cb.CloseClipboard = MagicMock()
-        mock_cb.EmptyClipboard = MagicMock()
-        mock_cb.SetClipboardText = MagicMock()
-        mock_cb.CF_UNICODETEXT = 13
+        with patch.dict('sys.modules', {'win32clipboard': self.mock_cb}):
+            result = self.cm.set_text("new text")
+            self.assertTrue(result)
 
-        result = self.cm.set_text("new text")
-        self.assertTrue(result)
-
-    @patch('gui_operations.win32clipboard', create=True)
-    def test_get_text_success(self, mock_cb):
+    def test_get_text_success(self):
         """成功获取剪贴板文本。"""
-        mock_cb.OpenClipboard = MagicMock()
-        mock_cb.CloseClipboard = MagicMock()
-        mock_cb.GetClipboardData = MagicMock(return_value="current text")
-        mock_cb.CF_UNICODETEXT = 13
+        self.mock_cb.GetClipboardData.return_value = "current text"
 
-        result = self.cm.get_text()
-        self.assertEqual(result, "current text")
+        with patch.dict('sys.modules', {'win32clipboard': self.mock_cb}):
+            result = self.cm.get_text()
+            self.assertEqual(result, "current text")
 
-    @patch('gui_operations.win32clipboard', create=True)
-    @patch('gui_operations.time')
-    def test_retry_on_access_denied(self, mock_time, mock_cb):
+    def test_retry_on_access_denied(self):
         """剪贴板被锁定时自动重试。"""
-        import ctypes
-
         # 模拟 ERROR_ACCESS_DENIED
         error = OSError("Access denied")
         error.winerror = 5
 
-        mock_cb.OpenClipboard = MagicMock()
-        mock_cb.CloseClipboard = MagicMock()
-        mock_cb.GetClipboardData = MagicMock(side_effect=[error, error, "success"])
-        mock_cb.CF_UNICODETEXT = 13
+        self.mock_cb.GetClipboardData.side_effect = [error, error, "success"]
 
-        result = self.cm.get_text()
-        self.assertEqual(result, "success")
-        # 验证重试了 2 次（第 3 次成功）
-        self.assertEqual(mock_cb.GetClipboardData.call_count, 3)
+        with patch.dict('sys.modules', {'win32clipboard': self.mock_cb}):
+            with patch('gui_operations.time'):
+                result = self.cm.get_text()
+                self.assertEqual(result, "success")
+                # 验证重试了 2 次（第 3 次成功）
+                self.assertEqual(self.mock_cb.GetClipboardData.call_count, 3)
 
 
 class TestGUIOperationsClipboard(unittest.TestCase):
@@ -184,39 +166,32 @@ class TestGUIOperationsClipboard(unittest.TestCase):
                 self._natural_gui._random_pause = MagicMock()
 
         self.ops = TestOps()
+        # 创建 win32clipboard mock
+        self.mock_cb = MagicMock()
+        self.mock_cb.OpenClipboard = MagicMock()
+        self.mock_cb.CloseClipboard = MagicMock()
+        self.mock_cb.EmptyClipboard = MagicMock()
+        self.mock_cb.SetClipboardText = MagicMock()
+        self.mock_cb.GetClipboardData = MagicMock(return_value="test")
+        self.mock_cb.CF_UNICODETEXT = 13
 
-    @patch('gui_operations.win32clipboard', create=True)
-    def test_set_clipboard_and_paste(self, mock_cb):
+    def test_set_clipboard_and_paste(self):
         """设置剪贴板并粘贴。"""
-        import pyautogui
+        with patch.dict('sys.modules', {'win32clipboard': self.mock_cb}):
+            with patch('pyautogui.keyDown') as mock_kd, \
+                 patch('pyautogui.press') as mock_press, \
+                 patch('pyautogui.keyUp') as mock_ku:
 
-        mock_cb.OpenClipboard = MagicMock()
-        mock_cb.CloseClipboard = MagicMock()
-        mock_cb.EmptyClipboard = MagicMock()
-        mock_cb.SetClipboardText = MagicMock()
-        mock_cb.GetClipboardData = MagicMock(return_value="test")
-        mock_cb.CF_UNICODETEXT = 13
+                result = self.ops._set_clipboard_and_paste("test text")
+                self.assertIsNotNone(result)
 
-        with patch('pyautogui.keyDown') as mock_kd, \
-             patch('pyautogui.press') as mock_press, \
-             patch('pyautogui.keyUp') as mock_ku:
-
-            result = self.ops._set_clipboard_and_paste("test text")
-            self.assertIsNotNone(result)
-
-    @patch('gui_operations.win32clipboard', create=True)
-    def test_restore_clipboard(self, mock_cb):
+    def test_restore_clipboard(self):
         """恢复剪贴板内容。"""
-        mock_cb.OpenClipboard = MagicMock()
-        mock_cb.CloseClipboard = MagicMock()
-        mock_cb.EmptyClipboard = MagicMock()
-        mock_cb.SetClipboardText = MagicMock()
-        mock_cb.CF_UNICODETEXT = 13
-
-        self.ops._restore_clipboard("original content")
-        mock_cb.SetClipboardText.assert_called_once_with(
-            "original content", mock_cb.CF_UNICODETEXT
-        )
+        with patch.dict('sys.modules', {'win32clipboard': self.mock_cb}):
+            self.ops._restore_clipboard("original content")
+            self.mock_cb.SetClipboardText.assert_called_once_with(
+                "original content", self.mock_cb.CF_UNICODETEXT
+            )
 
     def test_restore_clipboard_none(self):
         """恢复 None 内容不执行操作。"""

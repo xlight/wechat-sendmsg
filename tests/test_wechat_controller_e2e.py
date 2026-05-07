@@ -94,7 +94,7 @@ class TestWeChatControllerE2E(unittest.TestCase):
 
     def test_send_with_hotkey_activation(self):
         """使用快捷键激活窗口。"""
-        self.controller._config.wechat_hotkey = "ctrl+alt+w"
+        self.controller._config._data["wechat_hotkey"] = "ctrl+alt+w"
 
         # Mock 快捷键激活成功
         with patch.object(self.controller, '_activate_window_by_hotkey') as mock_hotkey:
@@ -111,7 +111,7 @@ class TestWeChatControllerE2E(unittest.TestCase):
 
     def test_send_without_hotkey(self):
         """不使用快捷键时通过 API 激活。"""
-        self.controller._config.wechat_hotkey = ""
+        self.controller._config._data["wechat_hotkey"] = ""
 
         self.mock_win_finder.find_wechat_window.return_value = 12345
         self.mock_win_finder.activate_window.return_value = True
