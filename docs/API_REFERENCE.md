@@ -224,12 +224,16 @@ curl http://localhost:8765/api/v1/status
 
 ```json
 {
-  "ok": true,
-  "wechat_status": {
-    "found": true,
-    "running": true,
-    "process_count": 1
-  }
+    "ok": true,
+    "wechat_status": {
+        "wechat_available": true,
+        "window_handle": 133436,
+        "wechat_version": "4.0.3.36",
+        "is_nt_framework": true,
+        "supported": true,
+        "platform": "windows",
+        "framework_type": "NT (4.0+)"
+    }
 }
 ```
 
@@ -857,7 +861,7 @@ pending ──→ processing ──→ completed
    │            └──→ pending (自动重试，retry_count < max_retries)
    │
    └──→ failed (重试耗尽) ──→ pending (手动 retry)
-   
+
 pending ──→ cancelled (手动 cancel)
 ```
 
