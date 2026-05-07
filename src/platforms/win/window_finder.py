@@ -7,7 +7,6 @@ Windows 窗口查找实现 — 封装现有 WindowFinderMixin + TrayManagerMixin
 """
 
 import logging
-import sys
 from typing import Optional, Dict, Any
 
 # 使用 sys.path 导入或绝对导入，避免相对导入在测试环境中出错

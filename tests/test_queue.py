@@ -4,13 +4,9 @@
 """
 
 import os
-import json
 import unittest
 import tempfile
-import sqlite3
-import time
 from unittest.mock import patch, MagicMock, PropertyMock
-from typing import Dict, Any
 
 
 def _create_temp_db():
@@ -45,8 +41,10 @@ class TestMessageQueue(unittest.TestCase):
 
     def test_enqueue_with_delay(self):
         """入队（延迟）。"""
-        msg_id = self.queue.enqueue('test', 'delayed msg', mode='queue',
-                                     priority=5, delay_seconds=10)
+        msg_id = self.queue.enqueue(
+            'test', 'delayed msg', mode='queue',
+            priority=5, delay_seconds=10
+        )
         msg = self.queue.get_message(msg_id)
         self.assertIsNotNone(msg)
         self.assertEqual(msg['status'], 'pending')
@@ -143,6 +141,7 @@ class TestQueueWorker(unittest.TestCase):
     def test_worker_start_stop(self):
         """Worker 启停。"""
         import asyncio
+
         async def run():
             await self.worker.start()
             self.assertTrue(self.worker.is_running)
@@ -154,6 +153,7 @@ class TestQueueWorker(unittest.TestCase):
     def test_execute_sync_success(self):
         """执行同步发送成功。"""
         import asyncio
+
         async def run():
             self.worker._controller.send_text_message_sync.return_value = {'ok': True}
             result = await self.worker.execute_sync('contact', 'hello')
@@ -164,6 +164,7 @@ class TestQueueWorker(unittest.TestCase):
     def test_execute_sync_fail(self):
         """执行同步发送失败。"""
         import asyncio
+
         async def run():
             self.worker._controller.send_text_message_sync.return_value = {
                 'ok': False, 'stage': 'send_text', 'reason': 'test_error'

@@ -7,8 +7,7 @@
 import ctypes
 import logging
 import re
-import time
-from typing import Any, List, Optional
+from typing import List, Optional
 
 import psutil
 import pyautogui
@@ -69,7 +68,12 @@ class WindowFinderMixin:
                     continue
 
                 version_info = win32api.GetFileVersionInfo(exe, "\\")
-                version = f"{version_info['FileVersionMS'] >> 16}.{version_info['FileVersionMS'] & 0xFFFF}.{version_info['FileVersionLS'] >> 16}.{version_info['FileVersionLS'] & 0xFFFF}"
+                version = (
+                    f"{version_info['FileVersionMS'] >> 16}."
+                    f"{version_info['FileVersionMS'] & 0xFFFF}."
+                    f"{version_info['FileVersionLS'] >> 16}."
+                    f"{version_info['FileVersionLS'] & 0xFFFF}"
+                )
                 self.wechat_version = version
 
                 try:
@@ -108,7 +112,12 @@ class WindowFinderMixin:
                     continue
 
                 version_info = win32api.GetFileVersionInfo(exe, "\\")
-                version = f"{version_info['FileVersionMS'] >> 16}.{version_info['FileVersionMS'] & 0xFFFF}.{version_info['FileVersionLS'] >> 16}.{version_info['FileVersionLS'] & 0xFFFF}"
+                version = (
+                    f"{version_info['FileVersionMS'] >> 16}."
+                    f"{version_info['FileVersionMS'] & 0xFFFF}."
+                    f"{version_info['FileVersionLS'] >> 16}."
+                    f"{version_info['FileVersionLS'] & 0xFFFF}"
+                )
                 self.wechat_version = version
 
                 try:
@@ -237,7 +246,13 @@ class WindowFinderMixin:
 
         win32gui.EnumWindows(enum_windows_callback, None)
 
-        self.logger.debug(f"窗口统计 - 可见主窗口: {len(visible_main_windows)}, 隐藏主窗口: {len(hidden_main_windows)}, Chrome窗口: {len(chrome_windows)}, 联系人列表: {len(contact_list_windows)}, 聊天窗口: {len(chat_windows)}")
+        self.logger.debug(
+            f"窗口统计 - 可见主窗口: {len(visible_main_windows)}, "
+            f"隐藏主窗口: {len(hidden_main_windows)}, "
+            f"Chrome窗口: {len(chrome_windows)}, "
+            f"联系人列表: {len(contact_list_windows)}, "
+            f"聊天窗口: {len(chat_windows)}"
+        )
 
         # 【优先级 1】返回可见/最小化的主窗口
         if visible_main_windows:
@@ -282,9 +297,11 @@ class WindowFinderMixin:
         if all_wechat_windows:
             self.logger.info(f"未找到可见微信窗口，发现 {len(all_wechat_windows)} 个微信窗口（可能在托盘中）")
             for win_info in all_wechat_windows:
-                self.logger.debug(f"  - hwnd={win_info['hwnd']}, class={win_info['class']}, "
-                                f"text={win_info['text']}, visible={win_info['visible']}, "
-                                f"iconic={win_info['iconic']}")
+                self.logger.debug(
+                    f"  - hwnd={win_info['hwnd']}, class={win_info['class']}, "
+                    f"text={win_info['text']}, visible={win_info['visible']}, "
+                    f"iconic={win_info['iconic']}"
+                )
 
         # 【首选方案】通过模拟双击托盘图标恢复（已验证可靠）
         self.logger.info("尝试通过模拟双击托盘图标恢复微信窗口...")

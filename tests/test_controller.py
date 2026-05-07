@@ -69,6 +69,7 @@ class TestWeChatControllerDarwin(unittest.TestCase):
     def test_schedule_message(self):
         """定时消息创建异步任务。"""
         import asyncio
+
         async def run():
             result = await self.controller.schedule_message('test', 'hello', 0.1)
             self.assertTrue(result)
@@ -84,8 +85,10 @@ class TestWeChatControllerDarwin(unittest.TestCase):
         """快捷键名称映射（cmd → command）。"""
         mock_pg = MagicMock()
         with patch('wechat_controller._get_pyautogui', return_value=mock_pg):
-            with patch.object(self.controller._win_finder, 'find_wechat_window',
-                            return_value=None):
+            with patch.object(
+                self.controller._win_finder, 'find_wechat_window',
+                return_value=None
+            ):
                 result = self.controller._activate_window_by_hotkey('cmd+shift+w')
                 self.assertIsNone(result)
                 mock_pg.hotkey.assert_called_with('command', 'shift', 'w')

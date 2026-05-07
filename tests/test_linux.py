@@ -3,10 +3,8 @@
 测试 Linux 平台实现 — 验证 LinuxWindowFinder、LinuxGUIOperations、LinuxClipboard
 """
 
-import subprocess
 import unittest
-from unittest.mock import patch, MagicMock
-from typing import Optional
+from unittest.mock import patch
 
 
 class FakePopenResult:

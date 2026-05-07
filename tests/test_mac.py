@@ -3,9 +3,8 @@
 测试 macOS 平台实现 — 验证 MacWindowFinder、MacGUIOperations、MacClipboard
 """
 
-import sys
 import unittest
-from unittest.mock import patch, MagicMock, PropertyMock
+from unittest.mock import patch, MagicMock
 
 
 # 模拟 pyobjc 框架
@@ -108,14 +107,14 @@ class TestMacWindowFinder(unittest.TestCase):
         self.finder = MacWindowFinder()
 
     @patch('platforms.mac.window_finder.MacWindowFinder._workspace',
-               return_value=FakeNSWorkspace)
+           return_value=FakeNSWorkspace)
     def test_find_wechat_window_found(self, mock_ws):
         """找到微信进程。"""
         pid = self.finder.find_wechat_window()
         self.assertEqual(pid, 12345)
 
     @patch('platforms.mac.window_finder.MacWindowFinder._workspace',
-               return_value=lambda: FakeNSWorkspace([]))
+           return_value=lambda: FakeNSWorkspace([]))
     def test_find_wechat_window_not_found(self, mock_ws):
         """未找到微信进程。"""
         pid = self.finder.find_wechat_window()
@@ -127,7 +126,7 @@ class TestMacWindowFinder(unittest.TestCase):
         self.assertIsNotNone(available)
 
     @patch('platforms.mac.window_finder.MacWindowFinder._sb',
-               return_value=FakeSBApplication)
+           return_value=FakeSBApplication)
     def test_activate_window(self, mock_sb):
         """激活微信窗口。"""
         result = self.finder.activate_window(12345)
@@ -151,8 +150,10 @@ class TestMacClipboard(unittest.TestCase):
         self._patcher_pg.start()
 
         pasteboard = FakeNSPasteboardInst
-        self._patcher_ns = patch('platforms.mac.gui_ops.MacClipboard._pb',
-            return_value=(pasteboard, 'public.utf8-plain-text'))
+        self._patcher_ns = patch(
+            'platforms.mac.gui_ops.MacClipboard._pb',
+            return_value=(pasteboard, 'public.utf8-plain-text')
+        )
         self._patcher_ns.start()
 
         from platforms.mac.gui_ops import MacClipboard

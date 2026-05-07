@@ -7,7 +7,6 @@
 
 import time
 import unittest
-from unittest.mock import patch, MagicMock
 
 
 class TestEnhancedRateLimiter(unittest.TestCase):

@@ -6,7 +6,6 @@ Windows 系统托盘实现 — pystray
 """
 
 import logging
-from typing import Any
 
 import pystray
 

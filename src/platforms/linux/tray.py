@@ -6,7 +6,7 @@ Linux 系统托盘实现 — pystray (AppIndicator / StatusNotifierItem)
 需要系统安装：
   # Ubuntu/Debian (X11)
   sudo apt install gir1.2-appindicator3-0.1
-  
+
   # Ubuntu/Debian (Wayland)
   sudo apt install gir1.2-ayatanaappindicator3-0.1
 

@@ -6,13 +6,12 @@ Streamable HTTP 模式下同时提供 HTTP API 端点和 MCP 端点（统一 Sta
 """
 
 import argparse
-import asyncio
 import logging
 import os
 import sys
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
 from starlette.applications import Starlette
@@ -28,7 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config import Config
 from message_queue import MessageQueue, QueueWorker
-from paths import get_base_dir, get_static_dir
+from paths import get_static_dir
 from wechat_controller import WeChatController
 
 # ── 日志配置 ──
@@ -96,8 +95,6 @@ async def send_wechat_message(
         mode: 发送模式，'queue'（默认，异步入队）或 'sync'（同步立即发送）
         priority: 消息优先级，0-10，数值越小优先级越高，默认 5
     """
-    global _message_queue, _queue_worker
-
     # 优先级范围校验
     priority = max(0, min(10, priority))
 
@@ -156,8 +153,6 @@ async def schedule_wechat_message(
         delay_seconds: 发送消息前的延迟秒数
         priority: 消息优先级，0-10，数值越小优先级越高，默认 5
     """
-    global _message_queue
-
     priority = max(0, min(10, priority))
 
     # 如果队列可用，使用队列的延迟入队
@@ -184,8 +179,6 @@ async def schedule_wechat_message(
 @mcp.tool()
 async def get_queue_status() -> str:
     """查看消息队列状态概览。"""
-    global _message_queue, _queue_worker
-
     if _message_queue is None:
         return "消息队列未初始化"
 
@@ -245,8 +238,6 @@ async def cancel_queue_message(message_id: int) -> str:
     Args:
         message_id: 要取消的消息 ID
     """
-    global _message_queue
-
     if _message_queue is None:
         return "消息队列未初始化"
 
@@ -263,8 +254,6 @@ async def retry_queue_message(message_id: int) -> str:
     Args:
         message_id: 要重试的消息 ID
     """
-    global _message_queue
-
     if _message_queue is None:
         return "消息队列未初始化"
 
@@ -591,7 +580,7 @@ def create_starlette_app() -> Starlette:
 
     # 构建路由
     routes = []
-    
+
     if mcp_endpoint is not None:
         routes.append(Route("/mcp", endpoint=mcp_endpoint))
     else:

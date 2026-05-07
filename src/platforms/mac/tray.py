@@ -7,8 +7,7 @@ macOS 菜单栏实现 — NSStatusBar (pyobjc)
 """
 
 import logging
-import sys
-from typing import Any
+from typing import Optional
 
 from ..tray import TrayManager, APP_NAME
 
@@ -63,10 +62,9 @@ class MacTrayManager(TrayManager):
     def _setup_status_bar(self) -> None:
         """创建菜单栏图标和菜单。"""
         from AppKit import (
-            NSStatusBar, NSStatusItem, NSVariableStatusItemLength,
+            NSStatusBar, NSVariableStatusItemLength,
             NSMenu, NSMenuItem, NSImage,
         )
-        from Foundation import NSObject
 
         # 创建状态栏项
         status_bar = NSStatusBar.systemStatusBar()

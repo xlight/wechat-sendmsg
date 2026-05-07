@@ -199,7 +199,7 @@ class WeChatController:
 
             window_id = self._win_finder.find_wechat_window()
             if window_id:
-                self.logger.info(f"快捷键激活成功")
+                self.logger.info("快捷键激活成功")
                 return window_id
 
             self.logger.debug("快捷键激活后未检测到微信窗口")
