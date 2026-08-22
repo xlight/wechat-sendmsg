@@ -2,7 +2,7 @@
 pyautogui>=0.9.53
 psutil>=5.9.0
 mcp[cli]>=1.0.0
-pystray>=0.2.8
+pystray>=0.19.5
 Pillow>=9.0.0
 
 # Windows 依赖
