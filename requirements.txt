@@ -1,7 +1,7 @@
 # Python >= 3.10 required (MCP SDK dependency)
 pyautogui>=0.9.53
 psutil>=5.9.0
-mcp[cli]>=1.0.0
+mcp[cli]>=2.0.0
 pystray>=0.2.8
 Pillow>=9.0.0
 
