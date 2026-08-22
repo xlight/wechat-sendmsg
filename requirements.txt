@@ -3,7 +3,7 @@ pyautogui>=0.9.53
 psutil>=5.9.0
 mcp[cli]>=1.0.0
 pystray>=0.2.8
-Pillow>=9.0.0
+Pillow>=12.3.0
 
 # Windows 依赖
 pywin32>=307; sys_platform == 'win32'
